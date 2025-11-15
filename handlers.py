@@ -298,12 +298,24 @@ async def handle_delay_callback(query, data: str, context: ContextTypes.DEFAULT_
                 
                 if chat_id:
                     chat_id = int(chat_id) if isinstance(chat_id, str) else chat_id
-                    delay_text = f"Опоздание. {hour}ч {minute}м"
+                    
+                    # Маппинг username -> имя для опозданий
+                    user_name_mapping = {
+                        "alex301182": "Lysenko Alexander",
+                        "Korudirp": "Ruslan Cherenkov",
+                        "sanya_hui_sosi1488": "Test"
+                    }
+                    
+                    # Получаем имя пользователя
+                    user_display_name = user_name_mapping.get(username, username)
+                    
+                    # Формат: "Test опоздание 0ч 15 мин"
+                    delay_text = f"{user_display_name} опоздание {hour}ч {minute} мин"
                     await context.bot.send_message(
                         chat_id=chat_id,
                         text=delay_text
                     )
-                    logger.info(f"Сообщение об опоздании отправлено в общий чат {chat_id} от @{username}")
+                    logger.info(f"Сообщение об опоздании отправлено в общий чат {chat_id} от @{username} ({user_display_name})")
             except Exception as e:
                 logger.error(f"Ошибка отправки сообщения в общий чат: {e}", exc_info=True)
             
