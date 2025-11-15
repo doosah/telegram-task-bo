@@ -708,8 +708,7 @@ def main():
         application.add_handler(CommandHandler("force_morning", force_morning_command))
         logger.info("Обработчик /force_morning зарегистрирован")
         
-        # Регистрируем ConversationHandler для создания задач ПЕРЕД обычными обработчиками
-        # чтобы он мог перехватить menu_create_task
+        # Регистрируем ConversationHandler для создания задач
         from conversations import (
             TITLE, DESCRIPTION, ASSIGNEE, DEADLINE, PHOTO,
             start_create_task, receive_title, receive_description, receive_assignee, receive_deadline, receive_photo,
@@ -785,11 +784,8 @@ def main():
             name="edit_task_conversation"
         )
         
-        # Регистрируем обработчик кнопок ПОСЛЕ ConversationHandlers
-        # чтобы ConversationHandlers могли перехватить свои callback_data
-        application.add_handler(CallbackQueryHandler(button_callback))
-        logger.info("Обработчик кнопок зарегистрирован")
-        
+        # ConversationHandlers должны быть зарегистрированы ПЕРЕД обычными CallbackQueryHandler
+        # чтобы они могли перехватить свои callback_data
         application.add_handler(create_task_conv)
         logger.info("ConversationHandler для создания задач зарегистрирован")
         
