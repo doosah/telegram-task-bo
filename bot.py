@@ -289,13 +289,23 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         
         # Сохраняем ID пользователя в базу данных
-        db.save_user_id(username, user_id, user_initials)
+        try:
+            db.save_user_id(username, user_id, user_initials)
+            logger.info(f"ID пользователя сохранен в БД")
+        except Exception as e:
+            logger.error(f"Ошибка сохранения ID пользователя: {e}", exc_info=True)
         
         # Получаем текущие статусы для АГ, КА и СА
-        status_ag = db.get_task_status(f"{task_id}_AG") or "⚪"
-        status_ka = db.get_task_status(f"{task_id}_KA") or "⚪"
-        status_sa = db.get_task_status(f"{task_id}_SA") or "⚪"
-        logger.info(f"Текущие статусы: АГ={status_ag}, КА={status_ka}, СА={status_sa}")
+        try:
+            status_ag = db.get_task_status(f"{task_id}_AG") or "⚪"
+            status_ka = db.get_task_status(f"{task_id}_KA") or "⚪"
+            status_sa = db.get_task_status(f"{task_id}_SA") or "⚪"
+            logger.info(f"Текущие статусы: АГ={status_ag}, КА={status_ka}, СА={status_sa}")
+        except Exception as e:
+            logger.error(f"Ошибка получения статусов из БД: {e}", exc_info=True)
+            status_ag = "⚪"
+            status_ka = "⚪"
+            status_sa = "⚪"
         
         # Меняем статус для текущего пользователя: ⚪ → ⏳ → ✅
         status_key = f"{task_id}_{user_initials}"
