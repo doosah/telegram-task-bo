@@ -97,10 +97,15 @@ async def add_urgent_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         
         # Проверяем, что команду запускает админ
         if user.username != ADMIN_USERNAME:
-        await update.message.reply_text(
-            "❌ У вас нет прав для использования этой команды."
-        )
+            await update.message.reply_text(
+                "❌ У вас нет прав для использования этой команды."
+            )
+            return
+    except Exception as e:
+        logger.error(f"Ошибка проверки прав в add_urgent_command: {e}", exc_info=True)
         return
+    
+    try:
     
     # Получаем текст задачи
     if not context.args:
@@ -773,8 +778,18 @@ async def send_evening_summary(app: Application):
         message = "✅ **ИТОГИ ДНЯ**\n\nВсе задачи выполнены! 🎉"
     else:
         message = "📊 **ИТОГИ ДНЯ**\n\nНевыполненные задачи:\n\n"
-        for item in incomplete:
-            message += f"• {item['task']} {item['users']}\n"
+        # Валидация: Telegram ограничивает длину сообщения до 4096 символов
+        max_message_length = 4000  # Оставляем запас
+        current_length = len(message)
+        
+        for idx, item in enumerate(incomplete):
+            task_line = f"• {item['task']} {item['users']}\n"
+            if current_length + len(task_line) > max_message_length:
+                message += f"\n... и еще {len(incomplete) - idx} задач"
+                logger.warning("Сообщение итогов дня обрезано из-за лимита длины")
+                break
+            message += task_line
+            current_length += len(task_line)
     
     # Отправляем в группу
     try:
