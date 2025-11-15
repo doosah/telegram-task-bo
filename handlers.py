@@ -490,17 +490,18 @@ async def handle_old_task_callback(query, data: str, context: ContextTypes.DEFAU
         logger.info(f"Статусы: AG={status_ag}, KA={status_ka}, SA={status_sa}")
         
         # Определяем общий статус задачи
-        # Считаем количество исполнителей, которые взяли задачу (не ⚪)
-        active_count = sum(1 for status in [status_ag, status_ka, status_sa] if status != "⚪")
-        
         # ✅ только если все выполнили
         if status_ag == "✅" and status_ka == "✅" and status_sa == "✅":
             overall_status = "✅"
-        elif active_count > 0:
-            # Показываем количество исполнителей эмодзи 👤
-            overall_status = "👤" * active_count
         else:
-            overall_status = "⚪"
+            # Считаем количество исполнителей, которые взяли задачу (⏳ или ✅)
+            active_count = sum(1 for status in [status_ag, status_ka, status_sa] if status in ["⏳", "✅"])
+            
+            if active_count > 0:
+                # Показываем количество исполнителей эмодзи 👤
+                overall_status = "👤" * active_count
+            else:
+                overall_status = "⚪"
         
         logger.info(f"Общий статус задачи: {overall_status}")
         
