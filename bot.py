@@ -48,25 +48,37 @@ MOSCOW_TZ = pytz.timezone('Europe/Moscow')
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /start - проверка работы бота"""
-    user = update.effective_user
-    
-    # Проверяем, что команду запускает админ
-    if user.username != ADMIN_USERNAME:
-        await update.message.reply_text(
-            "❌ У вас нет прав для использования этой команды."
+    try:
+        user = update.effective_user
+        logger.info(f"Команда /start от пользователя @{user.username} (ID: {user.id})")
+        
+        # Все могут использовать /start для проверки
+        response = (
+            f"✅ Бот работает!\n\n"
+            f"👤 Пользователь: @{user.username if user.username else 'без username'}\n"
+            f"🆔 ID: {user.id}\n"
+            f"📅 Время: {datetime.now(MOSCOW_TZ).strftime('%Y-%m-%d %H:%M:%S')}\n\n"
         )
-        return
-    
-    await update.message.reply_text(
-        f"✅ Бот работает!\n\n"
-        f"👤 Пользователь: @{user.username}\n"
-        f"🆔 ID: {user.id}\n"
-        f"📅 Время: {datetime.now(MOSCOW_TZ).strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-        f"Доступные команды:\n"
-        f"/start - проверка работы\n"
-        f"/add_urgent ТЕКСТ - добавить срочную задачу\n"
-        f"/force_morning - отправить задачи сейчас"
-    )
+        
+        # Если это админ - показываем команды
+        if user.username == ADMIN_USERNAME:
+            response += (
+                f"Доступные команды:\n"
+                f"/start - проверка работы\n"
+                f"/add_urgent ТЕКСТ - добавить срочную задачу\n"
+                f"/force_morning - отправить задачи сейчас"
+            )
+        else:
+            response += "Для использования команд нужны права администратора."
+        
+        await update.message.reply_text(response)
+        logger.info(f"Ответ отправлен пользователю @{user.username}")
+    except Exception as e:
+        logger.error(f"Ошибка в start_command: {e}", exc_info=True)
+        try:
+            await update.message.reply_text(f"❌ Ошибка: {e}")
+        except:
+            pass
 
 
 async def add_urgent_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -417,25 +429,46 @@ def setup_scheduler(app: Application):
 
 def main():
     """Главная функция - запуск бота"""
-    logger.info("Запуск бота...")
-    
-    # Создаем приложение бота
-    application = Application.builder().token(BOT_TOKEN).build()
-    
-    # Регистрируем обработчики команд
-    application.add_handler(CommandHandler("start", start_command))
-    application.add_handler(CommandHandler("add_urgent", add_urgent_command))
-    application.add_handler(CommandHandler("force_morning", force_morning_command))
-    
-    # Регистрируем обработчик кнопок
-    application.add_handler(CallbackQueryHandler(button_callback))
-    
-    # Настраиваем расписание
-    setup_scheduler(application)
-    
-    # Запускаем бота
-    logger.info("Бот запущен и готов к работе!")
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    try:
+        logger.info("=" * 50)
+        logger.info("ЗАПУСК БОТА")
+        logger.info(f"BOT_TOKEN: {BOT_TOKEN[:10]}... (длина: {len(BOT_TOKEN)})")
+        logger.info(f"CHAT_ID: {CHAT_ID}")
+        logger.info(f"ADMIN_USERNAME: {ADMIN_USERNAME}")
+        logger.info("=" * 50)
+        
+        # Создаем приложение бота
+        application = Application.builder().token(BOT_TOKEN).build()
+        logger.info("Приложение бота создано")
+        
+        # Регистрируем обработчики команд
+        application.add_handler(CommandHandler("start", start_command))
+        logger.info("Обработчик /start зарегистрирован")
+        
+        application.add_handler(CommandHandler("add_urgent", add_urgent_command))
+        logger.info("Обработчик /add_urgent зарегистрирован")
+        
+        application.add_handler(CommandHandler("force_morning", force_morning_command))
+        logger.info("Обработчик /force_morning зарегистрирован")
+        
+        # Регистрируем обработчик кнопок
+        application.add_handler(CallbackQueryHandler(button_callback))
+        logger.info("Обработчик кнопок зарегистрирован")
+        
+        # Настраиваем расписание
+        setup_scheduler(application)
+        logger.info("Расписание настроено")
+        
+        # Запускаем бота
+        logger.info("Бот запущен и готов к работе!")
+        logger.info("Ожидание команд...")
+        application.run_polling(
+            allowed_updates=Update.ALL_TYPES,
+            drop_pending_updates=True
+        )
+    except Exception as e:
+        logger.error(f"КРИТИЧЕСКАЯ ОШИБКА при запуске бота: {e}", exc_info=True)
+        raise
 
 
 if __name__ == '__main__':
