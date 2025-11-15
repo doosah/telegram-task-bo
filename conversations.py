@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 # Состояния для ConversationHandler
 (TITLE, DESCRIPTION, DEADLINE, ASSIGNEE) = range(4)
+(EDIT_TITLE, EDIT_DESCRIPTION, EDIT_DEADLINE, EDIT_ASSIGNEE) = range(4, 8)
 
 
 async def start_create_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:

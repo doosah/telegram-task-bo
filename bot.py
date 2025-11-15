@@ -707,7 +707,10 @@ def main():
         from conversations import (
             TITLE, DESCRIPTION, DEADLINE, ASSIGNEE,
             start_create_task, receive_title, receive_description, receive_deadline, receive_assignee,
-            skip_description, skip_deadline, cancel_create_task
+            skip_description, skip_deadline, cancel_create_task,
+            EDIT_TITLE, EDIT_DESCRIPTION, EDIT_DEADLINE, EDIT_ASSIGNEE,
+            start_edit_task, receive_edit_title, receive_edit_description, receive_edit_deadline, receive_edit_assignee,
+            skip_edit_title, skip_edit_description, skip_edit_deadline, cancel_edit_task
         )
         
         create_task_conv = ConversationHandler(
@@ -738,8 +741,42 @@ def main():
             name="create_task_conversation"
         )
         
+        edit_task_conv = ConversationHandler(
+            entry_points=[
+                CallbackQueryHandler(start_edit_task, pattern="^task_edit_")
+            ],
+            states={
+                EDIT_TITLE: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, receive_edit_title),
+                    CallbackQueryHandler(skip_edit_title, pattern="^skip_edit_title$")
+                ],
+                EDIT_DESCRIPTION: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, receive_edit_description),
+                    CallbackQueryHandler(skip_edit_description, pattern="^skip_edit_description$")
+                ],
+                EDIT_DEADLINE: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, receive_edit_deadline),
+                    CallbackQueryHandler(skip_edit_deadline, pattern="^skip_edit_deadline$")
+                ],
+                EDIT_ASSIGNEE: [
+                    CallbackQueryHandler(
+                        receive_edit_assignee,
+                        pattern="^assignee_"
+                    )
+                ]
+            },
+            fallbacks=[
+                CallbackQueryHandler(cancel_edit_task, pattern="^cancel_edit_task$"),
+                CommandHandler("cancel", cancel_edit_task)
+            ],
+            name="edit_task_conversation"
+        )
+        
         application.add_handler(create_task_conv)
         logger.info("ConversationHandler для создания задач зарегистрирован")
+        
+        application.add_handler(edit_task_conv)
+        logger.info("ConversationHandler для редактирования задач зарегистрирован")
         
         # Настраиваем расписание
         setup_scheduler(application)
