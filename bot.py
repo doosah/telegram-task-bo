@@ -80,6 +80,12 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             }
             if user.username in user_mapping:
                 db.save_user_id(user.username, user.id, user_mapping[user.username]["initials"])
+            
+            # Если это администратор, сохраняем его ID
+            if user.username == ADMIN_USERNAME:
+                db.save_user_id(ADMIN_USERNAME, user.id, "ADMIN")
+                context.bot_data['admin_id'] = user.id
+                logger.info(f"Admin ID сохранен: {user.id}")
         
         response = (
             f"👋 Добро пожаловать!\n\n"
