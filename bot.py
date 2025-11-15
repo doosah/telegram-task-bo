@@ -176,30 +176,18 @@ async def force_morning_command(update: Update, context: ContextTypes.DEFAULT_TY
 
 def create_task_keyboard(task_text: str, task_id: str) -> InlineKeyboardMarkup:
     """Создает кнопки для задачи (АГ и КА)"""
-    # Используем дефолтные статусы для быстрого создания клавиатуры
-    # Статусы будут обновляться при нажатии на кнопки
-    status_ag = "⚪"
-    status_ka = "⚪"
+    # ВСЕГДА используем дефолтные статусы ⚪ для быстрого создания клавиатуры
+    # Статусы будут обновляться при нажатии на кнопки через button_callback
+    # НЕ обращаемся к БД здесь, чтобы избежать блокировок и зависаний
     
-    try:
-        # Пытаемся получить статусы из базы, но не блокируем если не получится
-        status_ag = db.get_task_status(f"{task_id}_AG") or "⚪"
-        status_ka = db.get_task_status(f"{task_id}_KA") or "⚪"
-    except Exception as e:
-        # Если ошибка - используем дефолтные статусы
-        logger.warning(f"Не удалось получить статусы из БД для {task_id}, используем ⚪: {e}")
-        status_ag = "⚪"
-        status_ka = "⚪"
-    
-    # Создаем кнопки
     buttons = [
         [
             InlineKeyboardButton(
-                f"АГ {status_ag}",
+                "АГ ⚪",
                 callback_data=f"task_{task_id}_AG"
             ),
             InlineKeyboardButton(
-                f"КА {status_ka}",
+                "КА ⚪",
                 callback_data=f"task_{task_id}_KA"
             )
         ]
