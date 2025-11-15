@@ -708,11 +708,8 @@ def main():
         application.add_handler(CommandHandler("force_morning", force_morning_command))
         logger.info("Обработчик /force_morning зарегистрирован")
         
-        # Регистрируем обработчик кнопок
-        application.add_handler(CallbackQueryHandler(button_callback))
-        logger.info("Обработчик кнопок зарегистрирован")
-        
-        # Регистрируем ConversationHandler для создания задач
+        # Регистрируем ConversationHandler для создания задач ПЕРЕД обычными обработчиками
+        # чтобы он мог перехватить menu_create_task
         from conversations import (
             TITLE, DESCRIPTION, ASSIGNEE, DEADLINE, PHOTO,
             start_create_task, receive_title, receive_description, receive_assignee, receive_deadline, receive_photo,
