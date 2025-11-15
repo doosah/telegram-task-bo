@@ -24,6 +24,7 @@ import pytz
 # Импортируем наши модули
 from database import Database
 from tasks import Tasks
+from reminders import send_custom_task_reminders
 from menu import (
     get_main_menu, get_testing_menu, get_tasks_menu, get_task_actions_menu,
     get_confirm_menu, get_assignee_menu, get_presence_menu,
@@ -877,9 +878,9 @@ async def send_evening_summary(app: Application):
         incomplete = []
     
     if not incomplete:
-        message = "✅ **ИТОГИ ДНЯ**\n\nВсе задачи выполнены! 🎉"
+        message = "✅ **ИТОГИ ДНЯ**\n\nГотово"
     else:
-        message = "📊 **ИТОГИ ДНЯ**\n\nНевыполненные задачи:\n\n"
+        message = "📊 **ИТОГИ ДНЯ**\n\nНевыполненные задачи (нужно выполнить до 16:50):\n\n"
         # Валидация: Telegram ограничивает длину сообщения до 4096 символов
         max_message_length = 4000  # Оставляем запас
         current_length = len(message)
@@ -969,8 +970,44 @@ def setup_scheduler(app: Application):
         args=[app]
     )
     
+    # Напоминания о ручных задачах:
+    # 9:00 - ежедневные напоминания (за несколько дней до дедлайна) и в день дедлайна
+    scheduler.add_job(
+        send_custom_task_reminders,
+        trigger=CronTrigger(hour=9, minute=0, day_of_week='mon-fri'),
+        args=[app]
+    )
+    
+    # 12:00 - напоминания в день дедлайна
+    scheduler.add_job(
+        send_custom_task_reminders,
+        trigger=CronTrigger(hour=12, minute=0, day_of_week='mon-fri'),
+        args=[app]
+    )
+    
+    # 14:00 - напоминания в день дедлайна
+    scheduler.add_job(
+        send_custom_task_reminders,
+        trigger=CronTrigger(hour=14, minute=0, day_of_week='mon-fri'),
+        args=[app]
+    )
+    
+    # 16:00 - напоминания в день дедлайна
+    scheduler.add_job(
+        send_custom_task_reminders,
+        trigger=CronTrigger(hour=16, minute=0, day_of_week='mon-fri'),
+        args=[app]
+    )
+    
+    # Каждые 15 минут - проверка напоминаний для задач на день (за 4ч, 2ч, 1ч, 30мин)
+    scheduler.add_job(
+        send_custom_task_reminders,
+        trigger=CronTrigger(minute='*/15', day_of_week='mon-fri'),
+        args=[app]
+    )
+    
     scheduler.start()
-    logger.info("Расписание настроено: 07:50 (присутствие), 08:00, 13:00, 16:50 (пн-пт)")
+    logger.info("Расписание настроено: 07:50 (присутствие), 08:00, 13:00, 16:50 (пн-пт), напоминания о ручных задачах")
 
 
 def main():
