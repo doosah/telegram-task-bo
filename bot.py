@@ -304,19 +304,6 @@ async def send_morning_tasks(app, force_weekend=False):
         
         logger.info(f"Попытка отправить {len(day_tasks)} задач в чат {chat_id}")
         
-        # Отправляем заголовок
-        try:
-            header_msg = await app.bot.send_message(
-                chat_id=chat_id,
-                text=f"📋 **ЗАДАЧИ НА {day_name.upper()}** ({date_str})",
-                parse_mode='Markdown'
-            )
-            logger.info(f"✅ Заголовок отправлен успешно. Message ID: {header_msg.message_id}")
-        except Exception as e:
-            logger.error(f"❌ ОШИБКА отправки заголовка в чат {chat_id}: {e}")
-            logger.error(f"   Тип ошибки: {type(e).__name__}")
-            raise
-        
         # Отправляем все задачи одним сообщением с кнопками под каждой задачей
         logger.info(f"Формирование сообщения с {len(day_tasks)} задачами...")
         
