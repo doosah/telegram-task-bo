@@ -251,8 +251,17 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Сохраняем в базу данных
     db.set_task_status(status_key, new_status)
     
-    # Обновляем сообщение
-    keyboard = create_task_keyboard("", task_id)
+    # Обновляем сообщение - получаем актуальные статусы из БД
+    status_ag = db.get_task_status(f"{task_id}_AG") or "⚪"
+    status_ka = db.get_task_status(f"{task_id}_KA") or "⚪"
+    
+    buttons = [
+        [
+            InlineKeyboardButton(f"АГ {status_ag}", callback_data=f"task_{task_id}_AG"),
+            InlineKeyboardButton(f"КА {status_ka}", callback_data=f"task_{task_id}_KA")
+        ]
+    ]
+    keyboard = InlineKeyboardMarkup(buttons)
     
     await query.edit_message_reply_markup(reply_markup=keyboard)
     
@@ -308,42 +317,40 @@ async def send_morning_tasks(app, force_weekend=False):
             logger.error(f"   Тип ошибки: {type(e).__name__}")
             raise
         
-        # Отправляем каждую задачу отдельным сообщением с кнопками
-        sent_count = 0
-        logger.info(f"Начинаем отправку {len(day_tasks)} задач...")
+        # Отправляем все задачи одним сообщением с кнопками под каждой задачей
+        logger.info(f"Формирование сообщения с {len(day_tasks)} задачами...")
+        
+        # Формируем текст сообщения со всеми задачами
+        message_text = f"📋 **ЗАДАЧИ НА {day_name.upper()}** ({date_str})\n\n"
+        
+        # Создаем кнопки для всех задач
+        all_buttons = []
         
         for i, task in enumerate(day_tasks, 1):
             task_id = f"{today}_{i}"
+            message_text += f"{i}. {task}\n"
             
-            logger.info(f"[{i}/{len(day_tasks)}] Подготовка задачи: {task[:50]}...")
-            
-            try:
-                # Создаем клавиатуру (быстро, без блокировок)
-                logger.info(f"[{i}/{len(day_tasks)}] Создание клавиатуры...")
-                keyboard = create_task_keyboard(task, task_id)
-                logger.info(f"[{i}/{len(day_tasks)}] ✅ Клавиатура создана")
-                
-                # Отправляем сообщение
-                logger.info(f"[{i}/{len(day_tasks)}] Отправка в чат {chat_id}...")
-                msg = await app.bot.send_message(
-                    chat_id=chat_id,
-                    text=f"{i}. {task}",
-                    reply_markup=keyboard
-                )
-                logger.info(f"✅ [{i}/{len(day_tasks)}] Задача отправлена! Message ID: {msg.message_id}")
-                sent_count += 1
-                
-                # Небольшая задержка между сообщениями
-                if i < len(day_tasks):
-                    await asyncio.sleep(0.2)
-                
-            except Exception as e:
-                logger.error(f"❌ ОШИБКА задачи {i}: {type(e).__name__}: {e}")
-                logger.error(f"   Задача: {task[:50]}...")
-                # Продолжаем отправку остальных задач
-                continue
+            # Создаем кнопки для этой задачи
+            buttons_row = [
+                InlineKeyboardButton("АГ ⚪", callback_data=f"task_{task_id}_AG"),
+                InlineKeyboardButton("КА ⚪", callback_data=f"task_{task_id}_KA")
+            ]
+            all_buttons.append(buttons_row)
         
-        logger.info(f"✅ Всего отправлено: {sent_count}/{len(day_tasks)} задач в чат {chat_id}")
+        # Создаем клавиатуру со всеми кнопками
+        keyboard = InlineKeyboardMarkup(all_buttons)
+        
+        try:
+            logger.info(f"Отправка сообщения с {len(day_tasks)} задачами в чат {chat_id}...")
+            msg = await app.bot.send_message(
+                chat_id=chat_id,
+                text=message_text,
+                reply_markup=keyboard
+            )
+            logger.info(f"✅ Все {len(day_tasks)} задач отправлены одним сообщением! Message ID: {msg.message_id}")
+        except Exception as e:
+            logger.error(f"❌ ОШИБКА отправки сообщения: {type(e).__name__}: {e}")
+            raise
                 
     except Exception as e:
         logger.error(f"❌ КРИТИЧЕСКАЯ ОШИБКА в send_morning_tasks: {e}", exc_info=True)
