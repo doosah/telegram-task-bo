@@ -176,36 +176,36 @@ async def force_morning_command(update: Update, context: ContextTypes.DEFAULT_TY
 
 def create_task_keyboard(task_text: str, task_id: str) -> InlineKeyboardMarkup:
     """Создает кнопки для задачи (АГ и КА)"""
+    # Используем дефолтные статусы для быстрого создания клавиатуры
+    # Статусы будут обновляться при нажатии на кнопки
+    status_ag = "⚪"
+    status_ka = "⚪"
+    
     try:
-        # Получаем текущий статус из базы данных (если нет - используем ⚪)
+        # Пытаемся получить статусы из базы, но не блокируем если не получится
         status_ag = db.get_task_status(f"{task_id}_AG") or "⚪"
         status_ka = db.get_task_status(f"{task_id}_KA") or "⚪"
-        
-        # Создаем кнопки
-        buttons = [
-            [
-                InlineKeyboardButton(
-                    f"АГ {status_ag}",
-                    callback_data=f"task_{task_id}_AG"
-                ),
-                InlineKeyboardButton(
-                    f"КА {status_ka}",
-                    callback_data=f"task_{task_id}_KA"
-                )
-            ]
-        ]
-        
-        return InlineKeyboardMarkup(buttons)
     except Exception as e:
-        # Если ошибка - возвращаем клавиатуру с дефолтными статусами
-        logger.error(f"Ошибка создания клавиатуры: {e}")
-        buttons = [
-            [
-                InlineKeyboardButton("АГ ⚪", callback_data=f"task_{task_id}_AG"),
-                InlineKeyboardButton("КА ⚪", callback_data=f"task_{task_id}_KA")
-            ]
+        # Если ошибка - используем дефолтные статусы
+        logger.warning(f"Не удалось получить статусы из БД для {task_id}, используем ⚪: {e}")
+        status_ag = "⚪"
+        status_ka = "⚪"
+    
+    # Создаем кнопки
+    buttons = [
+        [
+            InlineKeyboardButton(
+                f"АГ {status_ag}",
+                callback_data=f"task_{task_id}_AG"
+            ),
+            InlineKeyboardButton(
+                f"КА {status_ka}",
+                callback_data=f"task_{task_id}_KA"
+            )
         ]
-        return InlineKeyboardMarkup(buttons)
+    ]
+    
+    return InlineKeyboardMarkup(buttons)
 
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -327,13 +327,15 @@ async def send_morning_tasks(app, force_weekend=False):
         for i, task in enumerate(day_tasks, 1):
             task_id = f"{today}_{i}"
             
-            logger.info(f"[{i}/{len(day_tasks)}] Подготовка задачи: {task}")
-            
-            # Создаем клавиатуру (с обработкой ошибок внутри функции)
-            keyboard = create_task_keyboard(task, task_id)
-            logger.info(f"[{i}/{len(day_tasks)}] Клавиатура создана")
+            logger.info(f"[{i}/{len(day_tasks)}] Подготовка задачи: {task[:50]}...")
             
             try:
+                # Создаем клавиатуру (быстро, без блокировок)
+                logger.info(f"[{i}/{len(day_tasks)}] Создание клавиатуры...")
+                keyboard = create_task_keyboard(task, task_id)
+                logger.info(f"[{i}/{len(day_tasks)}] ✅ Клавиатура создана")
+                
+                # Отправляем сообщение
                 logger.info(f"[{i}/{len(day_tasks)}] Отправка в чат {chat_id}...")
                 msg = await app.bot.send_message(
                     chat_id=chat_id,
@@ -344,12 +346,12 @@ async def send_morning_tasks(app, force_weekend=False):
                 sent_count += 1
                 
                 # Небольшая задержка между сообщениями
-                if i < len(day_tasks):  # Не ждем после последней задачи
-                    await asyncio.sleep(0.3)
+                if i < len(day_tasks):
+                    await asyncio.sleep(0.2)
                 
             except Exception as e:
-                logger.error(f"❌ ОШИБКА отправки задачи {i}: {e}")
-                logger.error(f"   Тип: {type(e).__name__}, Задача: {task[:50]}...")
+                logger.error(f"❌ ОШИБКА задачи {i}: {type(e).__name__}: {e}")
+                logger.error(f"   Задача: {task[:50]}...")
                 # Продолжаем отправку остальных задач
                 continue
         
