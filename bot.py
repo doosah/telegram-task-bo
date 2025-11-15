@@ -285,60 +285,90 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Сохраняем ID пользователя в базу данных
         try:
+            logger.info(f"Сохранение ID пользователя в БД: username={username}, user_id={user_id}, initials={user_initials}")
             db.save_user_id(username, user_id, user_initials)
-            logger.info(f"ID пользователя сохранен в БД")
+            logger.info(f"✅ ID пользователя сохранен в БД")
         except Exception as e:
-            logger.error(f"Ошибка сохранения ID пользователя: {e}", exc_info=True)
+            logger.error(f"❌ Ошибка сохранения ID пользователя: {type(e).__name__}: {e}", exc_info=True)
+            # Продолжаем работу, даже если не удалось сохранить
         
         # Получаем текущие статусы для АГ, КА и СА
+        logger.info(f"Получение статусов из БД для задачи {task_id}...")
         try:
-            status_ag = db.get_task_status(f"{task_id}_AG") or "⚪"
-            status_ka = db.get_task_status(f"{task_id}_KA") or "⚪"
-            status_sa = db.get_task_status(f"{task_id}_SA") or "⚪"
-            logger.info(f"Текущие статусы: АГ={status_ag}, КА={status_ka}, СА={status_sa}")
+            status_key_ag = f"{task_id}_AG"
+            status_key_ka = f"{task_id}_KA"
+            status_key_sa = f"{task_id}_SA"
+            logger.info(f"Ключи статусов: AG={status_key_ag}, KA={status_key_ka}, SA={status_key_sa}")
+            
+            status_ag = db.get_task_status(status_key_ag) or "⚪"
+            logger.info(f"Статус АГ получен: {status_ag}")
+            
+            status_ka = db.get_task_status(status_key_ka) or "⚪"
+            logger.info(f"Статус КА получен: {status_ka}")
+            
+            status_sa = db.get_task_status(status_key_sa) or "⚪"
+            logger.info(f"Статус СА получен: {status_sa}")
+            
+            logger.info(f"✅ Текущие статусы: АГ={status_ag}, КА={status_ka}, СА={status_sa}")
         except Exception as e:
-            logger.error(f"Ошибка получения статусов из БД: {e}", exc_info=True)
+            logger.error(f"❌ Ошибка получения статусов из БД: {type(e).__name__}: {e}", exc_info=True)
             status_ag = "⚪"
             status_ka = "⚪"
             status_sa = "⚪"
+            logger.warning(f"Используем дефолтные статусы: АГ={status_ag}, КА={status_ka}, СА={status_sa}")
         
         # Меняем статус для текущего пользователя: ⚪ → ⏳ → ✅
         status_key = f"{task_id}_{user_initials}"
+        logger.info(f"Получение текущего статуса для ключа: {status_key}")
         try:
             current_status = db.get_task_status(status_key) or "⚪"
+            logger.info(f"Текущий статус получен: {current_status}")
         except Exception as e:
-            logger.error(f"Ошибка получения текущего статуса: {e}", exc_info=True)
+            logger.error(f"❌ Ошибка получения текущего статуса: {type(e).__name__}: {e}", exc_info=True)
             current_status = "⚪"
+            logger.warning(f"Используем дефолтный статус: {current_status}")
         
         # Цикл: ⚪ → ⏳ → ✅ → ⚪
         status_cycle = {"⚪": "⏳", "⏳": "✅", "✅": "⚪"}
         new_status = status_cycle.get(current_status, "⚪")
-        logger.info(f"Статус {user_initials}: {current_status} → {new_status}")
+        logger.info(f"🔄 Статус {user_initials}: {current_status} → {new_status}")
         
         # Сохраняем новый статус
+        logger.info(f"Сохранение нового статуса: {status_key} = {new_status}")
         try:
             db.set_task_status(status_key, new_status)
-            logger.info(f"Статус сохранен в БД: {status_key} = {new_status}")
+            logger.info(f"✅ Статус сохранен в БД: {status_key} = {new_status}")
         except Exception as e:
-            logger.error(f"Ошибка сохранения статуса: {e}", exc_info=True)
+            logger.error(f"❌ Ошибка сохранения статуса: {type(e).__name__}: {e}", exc_info=True)
+            # Продолжаем работу, даже если не удалось сохранить
         
         # Обновляем статусы после изменения
+        logger.info(f"Обновление локальных статусов для {user_initials}...")
         if user_initials == "AG":
             status_ag = new_status
+            logger.info(f"Статус АГ обновлен: {status_ag}")
         elif user_initials == "KA":
             status_ka = new_status
+            logger.info(f"Статус КА обновлен: {status_ka}")
         elif user_initials == "SA":
             status_sa = new_status
+            logger.info(f"Статус СА обновлен: {status_sa}")
+        else:
+            logger.warning(f"Неизвестные инициалы: {user_initials}")
         
         # Определяем общий статус задачи для отображения (✅ только когда все 3 выполнили)
+        logger.info(f"Вычисление общего статуса: АГ={status_ag}, КА={status_ka}, СА={status_sa}")
         if status_ag == "✅" and status_ka == "✅" and status_sa == "✅":
             task_status = "✅"  # Все трое выполнили
+            logger.info("✅ Все участники выполнили задачу")
         elif status_ag != "⚪" or status_ka != "⚪" or status_sa != "⚪":
             task_status = "⏳"  # Кто-то взял в работу
+            logger.info("⏳ Кто-то взял задачу в работу")
         else:
             task_status = "⚪"  # Никто не взял
+            logger.info("⚪ Никто не взял задачу")
         
-        logger.info(f"Общий статус задачи: {task_status}")
+        logger.info(f"✅ Общий статус задачи: {task_status}")
         
         # Обновляем сообщение - обновляем кнопку для этой задачи
         if not query.message:
