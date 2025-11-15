@@ -106,8 +106,7 @@ async def add_urgent_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
     
     try:
-    
-    # Получаем текст задачи
+        # Получаем текст задачи
     if not context.args:
         await update.message.reply_text(
             "❌ Использование: /add_urgent ТЕКСТ ЗАДАЧИ\n\n"
