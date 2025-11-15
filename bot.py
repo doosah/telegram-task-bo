@@ -242,54 +242,79 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer(f"✅ Статус изменен: {new_status}", show_alert=False)
 
 
-async def send_morning_tasks(app):
+async def send_morning_tasks(app, force_weekend=False):
     """Отправка задач на день в 08:00"""
     try:
         # Проверяем, что сегодня рабочий день (пн-пт)
-        today = datetime.now(MOSCOW_TZ).weekday()  # 0=понедельник, 4=пятница
+        today = datetime.now(MOSCOW_TZ).weekday()  # 0=понедельник, 4=пятница, 5=суббота, 6=воскресенье
+        
+        logger.info(f"Текущий день недели: {today} (0=пн, 4=пт, 5=сб, 6=вс), force_weekend={force_weekend}")
+        
+        # Если выходной и не принудительная отправка - используем задачи понедельника для теста
+        if today > 4 and not force_weekend:
+            logger.info(f"Сегодня выходной (день {today}), используем задачи понедельника для теста")
+            today = 0  # Используем задачи понедельника
         
         # Получаем задачи на сегодня
         day_tasks = tasks_manager.get_tasks_for_day(today)
         
         if not day_tasks:
-            logger.warning(f"Нет задач для дня {today}")
-            return
+            logger.warning(f"Нет задач для дня {today}, используем задачи понедельника")
+            # Если нет задач, используем задачи понедельника
+            day_tasks = tasks_manager.get_tasks_for_day(0)
+            today = 0
+            logger.info(f"Используем задачи понедельника: {len(day_tasks)} задач")
         
         # Формируем сообщение
         day_names = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница"]
-        day_name = day_names[today]
+        day_name = day_names[today] if today < 5 else "Понедельник"
         date_str = datetime.now(MOSCOW_TZ).strftime("%d.%m.%Y")
         
-        logger.info(f"Отправка задач на {day_name} ({date_str})")
+        logger.info(f"Отправка задач на {day_name} ({date_str}), всего задач: {len(day_tasks)}")
         
         # Преобразуем CHAT_ID в int если это строка
         chat_id = int(CHAT_ID) if isinstance(CHAT_ID, str) else CHAT_ID
         
+        logger.info(f"Попытка отправить {len(day_tasks)} задач в чат {chat_id}")
+        
         # Отправляем заголовок
-        await app.bot.send_message(
-            chat_id=chat_id,
-            text=f"📋 **ЗАДАЧИ НА {day_name.upper()}** ({date_str})",
-            parse_mode='Markdown'
-        )
+        try:
+            header_msg = await app.bot.send_message(
+                chat_id=chat_id,
+                text=f"📋 **ЗАДАЧИ НА {day_name.upper()}** ({date_str})",
+                parse_mode='Markdown'
+            )
+            logger.info(f"✅ Заголовок отправлен успешно. Message ID: {header_msg.message_id}")
+        except Exception as e:
+            logger.error(f"❌ ОШИБКА отправки заголовка в чат {chat_id}: {e}")
+            logger.error(f"   Тип ошибки: {type(e).__name__}")
+            raise
         
         # Отправляем каждую задачу отдельным сообщением с кнопками
+        sent_count = 0
         for i, task in enumerate(day_tasks, 1):
             task_id = f"{today}_{i}"
             keyboard = create_task_keyboard(task, task_id)
             
             try:
-                await app.bot.send_message(
+                msg = await app.bot.send_message(
                     chat_id=chat_id,
                     text=f"{i}. {task}",
                     reply_markup=keyboard,
                     parse_mode='Markdown'
                 )
-                logger.info(f"Задача {i} отправлена: {task}")
+                logger.info(f"✅ Задача {i}/{len(day_tasks)} отправлена (Message ID: {msg.message_id}): {task}")
+                sent_count += 1
             except Exception as e:
-                logger.error(f"Ошибка отправки задачи {i}: {e}")
+                logger.error(f"❌ ОШИБКА отправки задачи {i}: {e}")
+                logger.error(f"   Тип ошибки: {type(e).__name__}")
+                logger.error(f"   Чат ID: {chat_id}, Задача: {task}")
+        
+        logger.info(f"✅ Всего отправлено: {sent_count}/{len(day_tasks)} задач в чат {chat_id}")
                 
     except Exception as e:
-        logger.error(f"Ошибка в send_morning_tasks: {e}", exc_info=True)
+        logger.error(f"❌ КРИТИЧЕСКАЯ ОШИБКА в send_morning_tasks: {e}", exc_info=True)
+        raise
 
 
 async def send_reminders(app: Application):
