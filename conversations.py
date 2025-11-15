@@ -1097,3 +1097,301 @@ async def cancel_complete_task(update: Update, context: ContextTypes.DEFAULT_TYP
         logger.error(f"Ошибка в cancel_complete_task: {e}", exc_info=True)
         return -1
 
+
+# ========== ФУНКЦИИ ДЛЯ РАБОТЫ С ЗАДАЧЕЙ (ВЗЯТЬ В РАБОТУ) ==========
+
+async def start_work_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Начало работы с задачей - показываем описание и кнопку 'Выполнена работа'"""
+    try:
+        query = update.callback_query
+        if not query:
+            return -1
+        
+        # Извлекаем task_id и assignee из callback_data: work_task_{task_id}_{assignee}
+        parts = query.data.split("_")
+        if len(parts) < 4:
+            await query.answer("❌ Неверный формат", show_alert=True)
+            return -1
+        
+        task_id = int(parts[2])
+        assignee = parts[3]
+        
+        # Получаем задачу из БД
+        if 'db' in context.bot_data:
+            db = context.bot_data['db']
+        else:
+            from database import Database
+            db = Database()
+        
+        task = db.get_custom_task(task_id)
+        if not task:
+            await query.answer("❌ Задача не найдена", show_alert=True)
+            return -1
+        
+        # Сохраняем данные в context
+        context.user_data['working_task_id'] = task_id
+        context.user_data['working_assignee'] = assignee
+        
+        # Формируем текст с описанием задачи
+        text = (
+            f"📋 **ЗАДАЧА #{task_id}**\n\n"
+            f"📝 **{task['title']}**\n\n"
+            f"📄 **Описание:**\n{task.get('description', 'Нет описания')}\n\n"
+            f"⏰ Срок: {task.get('deadline', 'Не указан')}\n"
+            f"👤 Исполнитель: {task.get('assignee', 'Не назначен')}\n\n"
+            f"Нажмите кнопку 'Выполнена работа' для продолжения:"
+        )
+        
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("✅ Выполнена работа", callback_data="work_done")
+        ], [
+            InlineKeyboardButton("❌ Отмена", callback_data="cancel_work_task")
+        ]])
+        
+        await query.answer()
+        await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
+        
+        logger.info(f"Начало работы с задачей #{task_id} для исполнителя {assignee}")
+        # Возвращаем -1, так как кнопка "work_done" будет обработана через entry_points
+        return -1
+        
+    except Exception as e:
+        logger.error(f"Ошибка в start_work_task: {e}", exc_info=True)
+        if query:
+            await query.answer("❌ Произошла ошибка", show_alert=True)
+        return -1
+
+
+async def work_done_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Обработка кнопки 'Выполнена работа' - запрос текста результата"""
+    try:
+        query = update.callback_query
+        await query.answer()
+        
+        text = (
+            "📝 **ВЫПОЛНЕНА РАБОТА**\n\n"
+            "Введите текст 'Выполнена работа' или опишите результат:\n\n"
+            "Или нажмите кнопку для пропуска:"
+        )
+        
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("⏭️ Пропустить текст", callback_data="skip_work_result")
+        ], [
+            InlineKeyboardButton("❌ Отмена", callback_data="cancel_work_task")
+        ]])
+        
+        await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
+        return WORK_RESULT
+        
+    except Exception as e:
+        logger.error(f"Ошибка в work_done_button: {e}", exc_info=True)
+        return -1
+
+
+async def receive_work_result(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Получение текста 'Выполнена работа' - переход к прикреплению материалов"""
+    try:
+        # Пользователь ввел текст
+        result_text = update.message.text.strip()
+        context.user_data['working_result'] = result_text
+        
+        text = (
+            "📎 **ПРИКРЕПИТЬ МАТЕРИАЛЫ**\n\n"
+            "Отправьте фото или видео материалы:\n\n"
+            "Или нажмите кнопку для пропуска:"
+        )
+        
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("⏭️ Пропустить материалы", callback_data="skip_work_photo")
+        ], [
+            InlineKeyboardButton("❌ Отмена", callback_data="cancel_work_task")
+        ]])
+        
+        await update.message.reply_text(text, reply_markup=keyboard, parse_mode='Markdown')
+        return WORK_PHOTO
+        
+    except Exception as e:
+        logger.error(f"Ошибка в receive_work_result: {e}", exc_info=True)
+        return -1
+
+
+async def skip_work_result(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Пропуск текста результата - переход к материалам"""
+    try:
+        query = update.callback_query
+        await query.answer()
+        
+        # Устанавливаем дефолтный текст
+        context.user_data['working_result'] = 'Выполнена работа'
+        
+        text = (
+            "📎 **ПРИКРЕПИТЬ МАТЕРИАЛЫ**\n\n"
+            "Отправьте фото или видео материалы:\n\n"
+            "Или нажмите кнопку для пропуска:"
+        )
+        
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("⏭️ Пропустить материалы", callback_data="skip_work_photo")
+        ], [
+            InlineKeyboardButton("❌ Отмена", callback_data="cancel_work_task")
+        ]])
+        
+        await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
+        return WORK_PHOTO
+        
+    except Exception as e:
+        logger.error(f"Ошибка в skip_work_result: {e}", exc_info=True)
+        return -1
+
+
+async def receive_work_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Получение фото/видео материалов - завершение работы"""
+    try:
+        task_id = context.user_data.get('working_task_id')
+        result_text = context.user_data.get('working_result', 'Выполнена работа')
+        
+        # Получаем фото/видео
+        photo_file_id = None
+        if update.message.photo:
+            photo_file_id = update.message.photo[-1].file_id
+        elif update.message.video:
+            photo_file_id = update.message.video.file_id
+        elif update.message.document:
+            photo_file_id = update.message.document.file_id
+        
+        # Обновляем задачу в БД
+        from datetime import datetime
+        if 'db' in context.bot_data:
+            db = context.bot_data['db']
+        else:
+            from database import Database
+            db = Database()
+        
+        db.update_custom_task(
+            task_id,
+            status='completed',
+            completed_at=datetime.now().isoformat(),
+            result_text=result_text,
+            result_photo=photo_file_id if photo_file_id else None
+        )
+        
+        task = db.get_custom_task(task_id)
+        
+        # Отправляем уведомление в бота (не в чат)
+        text = (
+            f"✅ **ЗАДАЧА ЗАВЕРШЕНА!**\n\n"
+            f"📝 Задача: {task['title']}\n"
+            f"📄 Результат: {result_text}\n"
+            f"📸 Материалы: {'Прикреплены' if photo_file_id else 'Не прикреплены'}\n\n"
+            f"ID задачи: #{task_id}"
+        )
+        
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("🔙 В главное меню", callback_data="menu_main")
+        ]])
+        
+        # Если есть фото, отправляем его вместе с текстом
+        if photo_file_id:
+            await update.message.reply_photo(
+                photo=photo_file_id,
+                caption=text,
+                reply_markup=keyboard,
+                parse_mode='Markdown'
+            )
+        else:
+            await update.message.reply_text(text, reply_markup=keyboard, parse_mode='Markdown')
+        
+        # Очищаем данные
+        context.user_data.pop('working_task_id', None)
+        context.user_data.pop('working_assignee', None)
+        context.user_data.pop('working_result', None)
+        
+        logger.info(f"Задача #{task_id} завершена через 'Взять в работу'")
+        return -1  # Завершаем диалог
+        
+    except Exception as e:
+        logger.error(f"Ошибка в receive_work_photo: {e}", exc_info=True)
+        return -1
+
+
+async def skip_work_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Пропуск материалов и завершение работы"""
+    try:
+        query = update.callback_query
+        await query.answer()
+        
+        task_id = context.user_data.get('working_task_id')
+        result_text = context.user_data.get('working_result', 'Выполнена работа')
+        
+        # Обновляем задачу в БД
+        from datetime import datetime
+        if 'db' in context.bot_data:
+            db = context.bot_data['db']
+        else:
+            from database import Database
+            db = Database()
+        
+        db.update_custom_task(
+            task_id,
+            status='completed',
+            completed_at=datetime.now().isoformat(),
+            result_text=result_text,
+            result_photo=None
+        )
+        
+        task = db.get_custom_task(task_id)
+        
+        text = (
+            f"✅ **ЗАДАЧА ЗАВЕРШЕНА!**\n\n"
+            f"📝 Задача: {task['title']}\n"
+            f"📄 Результат: {result_text}\n\n"
+            f"ID задачи: #{task_id}"
+        )
+        
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("🔙 В главное меню", callback_data="menu_main")
+        ]])
+        
+        await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
+        await query.answer("✅ Задача успешно завершена!")
+        
+        # Очищаем данные
+        context.user_data.pop('working_task_id', None)
+        context.user_data.pop('working_assignee', None)
+        context.user_data.pop('working_result', None)
+        
+        logger.info(f"Задача #{task_id} завершена без материалов")
+        return -1  # Завершаем диалог
+        
+    except Exception as e:
+        logger.error(f"Ошибка в skip_work_photo: {e}", exc_info=True)
+        return -1
+
+
+async def cancel_work_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Отмена работы с задачей"""
+    try:
+        query = update.callback_query
+        if query:
+            await query.answer("❌ Отмена работы с задачей")
+        
+        text = "❌ **ОТМЕНА**\n\nРабота с задачей отменена."
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("🔙 В главное меню", callback_data="menu_main")
+        ]])
+        
+        if query:
+            await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
+        elif update.message:
+            await update.message.reply_text(text, reply_markup=keyboard, parse_mode='Markdown')
+        
+        # Очищаем данные
+        context.user_data.pop('working_task_id', None)
+        context.user_data.pop('working_assignee', None)
+        context.user_data.pop('working_result', None)
+        
+        return -1
+    except Exception as e:
+        logger.error(f"Ошибка в cancel_work_task: {e}", exc_info=True)
+        return -1
+
