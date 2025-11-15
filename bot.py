@@ -549,7 +549,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         
         # Обработка меню (кроме menu_create_task - его обрабатывает ConversationHandler)
-        if data.startswith("menu_") and data != "menu_create_task":
+        # Если это menu_create_task, просто возвращаемся - ConversationHandler должен перехватить
+        if data == "menu_create_task":
+            return  # Не обрабатываем здесь, пусть ConversationHandler перехватит
+        
+        if data.startswith("menu_"):
             await handle_menu_callback(query, data, context, db)
             return
         
@@ -1125,11 +1129,12 @@ def main():
         
         # ConversationHandlers должны быть зарегистрированы ПЕРЕД обычными CallbackQueryHandler
         # чтобы они могли перехватить свои callback_data
-        application.add_handler(create_task_conv)
-        logger.info("ConversationHandler для создания задач зарегистрирован")
+        # Используем группу 2 для ConversationHandlers, чтобы они обрабатывались ПЕРЕД button_callback
+        application.add_handler(create_task_conv, group=2)
+        logger.info("ConversationHandler для создания задач зарегистрирован (группа 2)")
         
-        application.add_handler(edit_task_conv)
-        logger.info("ConversationHandler для редактирования задач зарегистрирован")
+        application.add_handler(edit_task_conv, group=2)
+        logger.info("ConversationHandler для редактирования задач зарегистрирован (группа 2)")
         
         complete_task_conv = ConversationHandler(
             entry_points=[
@@ -1154,16 +1159,16 @@ def main():
             name="complete_task_conversation"
         )
         
-        application.add_handler(complete_task_conv)
-        logger.info("ConversationHandler для завершения задач зарегистрирован")
+        application.add_handler(complete_task_conv, group=2)
+        logger.info("ConversationHandler для завершения задач зарегистрирован (группа 2)")
         
         # Убрали ConversationHandler для работы с задачей - теперь используем простые кнопки
         # Обработчики handle_work_task_take и handle_work_task_done зарегистрированы через button_callback
         
-        # Регистрируем обработчик кнопок ПОСЛЕ всех ConversationHandlers
+        # Регистрируем обработчик кнопок ПОСЛЕ всех ConversationHandlers (группа 3)
         # чтобы ConversationHandlers могли перехватить свои callback_data
-        application.add_handler(CallbackQueryHandler(button_callback))
-        logger.info("Обработчик кнопок зарегистрирован")
+        application.add_handler(CallbackQueryHandler(button_callback), group=3)
+        logger.info("Обработчик кнопок зарегистрирован (группа 3)")
         
         # Настраиваем расписание
         setup_scheduler(application)

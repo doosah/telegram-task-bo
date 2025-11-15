@@ -307,7 +307,8 @@ async def handle_delay_callback(query, data: str, context: ContextTypes.DEFAULT_
             except Exception as e:
                 logger.error(f"Ошибка отправки сообщения в общий чат: {e}", exc_info=True)
             
-            # Отправляем сотруднику сообщение о необходимости написать причину
+            # Пытаемся отправить сотруднику сообщение о необходимости написать причину
+            # Но только если пользователь уже начал диалог с ботом
             try:
                 reason_text = "Напишите руководителю причину опоздания."
                 await context.bot.send_message(
@@ -316,7 +317,9 @@ async def handle_delay_callback(query, data: str, context: ContextTypes.DEFAULT_
                 )
                 await query.answer("✅ Сообщение отправлено в общий чат")
             except Exception as e:
-                logger.error(f"Ошибка отправки уведомления сотруднику: {e}", exc_info=True)
+                # Если пользователь не начал диалог с ботом, просто игнорируем ошибку
+                # Сообщение в общий чат уже отправлено
+                logger.warning(f"Не удалось отправить уведомление сотруднику (возможно, не начал диалог): {e}")
                 await query.answer("✅ Сообщение отправлено в общий чат")
             
             # Сохраняем в БД
