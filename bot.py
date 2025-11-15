@@ -365,6 +365,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await handle_assignee_callback(query, data, context, db)
             return
         
+        # Обработка "Взять в работу" - передаем ConversationHandler
+        if data.startswith("work_task_"):
+            # ConversationHandler обработает это через entry_points
+            return
+        
         logger.warning(f"Неизвестный формат данных кнопки: {data}")
         await query.answer("❌ Неизвестная команда")
         
@@ -787,7 +792,10 @@ def main():
             skip_edit_title, skip_edit_description, skip_edit_deadline, cancel_edit_task,
             COMPLETE_RESULT, COMPLETE_PHOTO,
             start_complete_task, receive_complete_result, receive_complete_photo,
-            skip_complete_result, skip_complete_photo, complete_fast, cancel_complete_task
+            skip_complete_result, skip_complete_photo, complete_fast, cancel_complete_task,
+            WORK_RESULT, WORK_PHOTO,
+            start_work_task, receive_work_result, receive_work_photo,
+            skip_work_result, skip_work_photo, cancel_work_task
         )
         
         create_task_conv = ConversationHandler(
@@ -886,6 +894,32 @@ def main():
         
         application.add_handler(complete_task_conv)
         logger.info("ConversationHandler для завершения задач зарегистрирован")
+        
+        # Регистрируем ConversationHandler для работы с задачей (Взять в работу)
+        work_task_conv = ConversationHandler(
+            entry_points=[
+                CallbackQueryHandler(start_work_task, pattern="^work_task_[0-9]+_(AG|KA|SA)$")
+            ],
+            states={
+                WORK_RESULT: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, receive_work_result),
+                    CallbackQueryHandler(skip_work_result, pattern="^skip_work_result$"),
+                    CallbackQueryHandler(receive_work_result, pattern="^work_done$")
+                ],
+                WORK_PHOTO: [
+                    MessageHandler(filters.PHOTO | filters.VIDEO | filters.Document.ALL, receive_work_photo),
+                    CallbackQueryHandler(skip_work_photo, pattern="^skip_work_photo$")
+                ]
+            },
+            fallbacks=[
+                CallbackQueryHandler(cancel_work_task, pattern="^cancel_work_task$"),
+                CommandHandler("cancel", cancel_work_task)
+            ],
+            name="work_task_conversation"
+        )
+        
+        application.add_handler(work_task_conv)
+        logger.info("ConversationHandler для работы с задачей зарегистрирован")
         
         # Регистрируем обработчик кнопок ПОСЛЕ всех ConversationHandlers
         # чтобы ConversationHandlers могли перехватить свои callback_data

@@ -94,25 +94,25 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
             await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
         
         elif data == "test_daily_tasks":
-            # Тестовая отправка ежедневных задач
+            # Тестовая отправка ежедневных задач - вызываем /force_morning напрямую
             await query.answer("⏳ Отправка задач...")
             
-            # Используем функции из bot_data, если они там есть
-            if 'send_morning_tasks' in context.bot_data:
-                send_morning_tasks = context.bot_data['send_morning_tasks']
-                class AppWrapper:
-                    def __init__(self, bot):
-                        self.bot = bot
-                app_wrapper = AppWrapper(context.bot)
-                try:
+            try:
+                # Вызываем функцию send_morning_tasks напрямую
+                if 'send_morning_tasks' in context.bot_data:
+                    send_morning_tasks = context.bot_data['send_morning_tasks']
+                    class AppWrapper:
+                        def __init__(self, bot):
+                            self.bot = bot
+                    app_wrapper = AppWrapper(context.bot)
                     await send_morning_tasks(app_wrapper, force_weekend=True)
                     text = "✅ **ЕЖЕДНЕВНЫЕ ЗАДАЧИ**\n\nЗадачи успешно отправлены в группу!"
-                except Exception as e:
-                    logger.error(f"Ошибка отправки ежедневных задач: {e}", exc_info=True)
-                    text = f"❌ **ОШИБКА**\n\nНе удалось отправить задачи:\n{str(e)[:200]}"
-            else:
-                # Если функции нет в bot_data, используем команду /force_morning
-                text = "✅ **ЕЖЕДНЕВНЫЕ ЗАДАЧИ**\n\nИспользуйте команду /force_morning для отправки задач."
+                else:
+                    # Если функции нет, отправляем сообщение пользователю
+                    text = "✅ **ЕЖЕДНЕВНЫЕ ЗАДАЧИ**\n\nИспользуйте команду /force_morning для отправки задач."
+            except Exception as e:
+                logger.error(f"Ошибка отправки ежедневных задач: {e}", exc_info=True)
+                text = f"❌ **ОШИБКА**\n\nНе удалось отправить задачи:\n{str(e)[:200]}"
             
             keyboard = InlineKeyboardMarkup([[
                 InlineKeyboardButton("🔙 К тестированию", callback_data="menu_testing")
@@ -123,20 +123,21 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
             # Контроль сотрудников - отправка кнопок присутствия (как в 07:50)
             await query.answer("⏳ Отправка кнопок...")
             
-            if 'send_presence_buttons' in context.bot_data:
-                send_presence_buttons = context.bot_data['send_presence_buttons']
-                class AppWrapper:
-                    def __init__(self, bot):
-                        self.bot = bot
-                app_wrapper = AppWrapper(context.bot)
-                try:
+            try:
+                # Вызываем функцию send_presence_buttons напрямую
+                if 'send_presence_buttons' in context.bot_data:
+                    send_presence_buttons = context.bot_data['send_presence_buttons']
+                    class AppWrapper:
+                        def __init__(self, bot):
+                            self.bot = bot
+                    app_wrapper = AppWrapper(context.bot)
                     await send_presence_buttons(app_wrapper)
                     text = "✅ **КОНТРОЛЬ СОТРУДНИКОВ**\n\nКнопки 'На рабочем месте' и 'Опаздываю' отправлены в группу!"
-                except Exception as e:
-                    logger.error(f"Ошибка отправки кнопок присутствия: {e}", exc_info=True)
-                    text = f"❌ **ОШИБКА**\n\nНе удалось отправить кнопки:\n{str(e)[:200]}"
-            else:
-                text = "✅ **КОНТРОЛЬ СОТРУДНИКОВ**\n\nКнопки будут отправлены автоматически в 07:50."
+                else:
+                    text = "✅ **КОНТРОЛЬ СОТРУДНИКОВ**\n\nКнопки будут отправлены автоматически в 07:50."
+            except Exception as e:
+                logger.error(f"Ошибка отправки кнопок присутствия: {e}", exc_info=True)
+                text = f"❌ **ОШИБКА**\n\nНе удалось отправить кнопки:\n{str(e)[:200]}"
             
             keyboard = InlineKeyboardMarkup([[
                 InlineKeyboardButton("🔙 К тестированию", callback_data="menu_testing")

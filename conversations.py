@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 (TITLE, DESCRIPTION, ASSIGNEE, DEADLINE, PHOTO) = range(5)
 (EDIT_TITLE, EDIT_DESCRIPTION, EDIT_DEADLINE, EDIT_ASSIGNEE) = range(5, 9)
 (COMPLETE_RESULT, COMPLETE_PHOTO) = range(9, 11)
+(WORK_RESULT, WORK_PHOTO) = range(11, 13)  # Состояния для работы с задачей
 
 
 async def start_create_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -136,17 +137,45 @@ async def receive_deadline(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     try:
         deadline_str = update.message.text.strip()
         
-        # Парсим дату в формате ДД.ММ.ГГГГ или ДД.ММ.ГГГГ ЧЧ:ММ
-        try:
-            if " " in deadline_str:
-                deadline = datetime.strptime(deadline_str, "%d.%m.%Y %H:%M")
+        # Парсим дату в различных форматах
+        deadline_parsed = None
+        
+        # Формат: "сегодня до 15:00" или "сегодня до 3:00 PM"
+        if "сегодня" in deadline_str.lower() or "today" in deadline_str.lower():
+            today = datetime.now()
+            # Ищем время после "до"
+            if "до" in deadline_str.lower() or "до" in deadline_str:
+                time_part = deadline_str.split("до")[-1].strip()
+                try:
+                    # Пробуем разные форматы времени
+                    if ":" in time_part:
+                        hour, minute = time_part.split(":")[:2]
+                        hour = int(hour.strip())
+                        minute = int(minute.strip().split()[0] if " " in minute else minute.strip())
+                        deadline_parsed = today.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                        deadline_str = f"сегодня до {hour:02d}:{minute:02d}"
+                    else:
+                        hour = int(time_part.strip().split()[0])
+                        deadline_parsed = today.replace(hour=hour, minute=0, second=0, microsecond=0)
+                        deadline_str = f"сегодня до {hour:02d}:00"
+                except:
+                    deadline_str = f"сегодня до {time_part}"
             else:
-                deadline = datetime.strptime(deadline_str, "%d.%m.%Y")
-            context.user_data['creating_task']['deadline'] = deadline_str
-            logger.info(f"Срок выполнения получен: {deadline_str}")
-        except ValueError:
-            await update.message.reply_text("❌ Неверный формат. Используйте ДД.ММ.ГГГГ ЧЧ:ММ или ДД.ММ.ГГГГ (например, 25.12.2024 14:30):")
-            return DEADLINE
+                deadline_str = "сегодня"
+        
+        # Формат: ДД.ММ.ГГГГ ЧЧ:ММ или ДД.ММ.ГГГГ
+        if not deadline_parsed:
+            try:
+                if " " in deadline_str:
+                    deadline_parsed = datetime.strptime(deadline_str, "%d.%m.%Y %H:%M")
+                else:
+                    deadline_parsed = datetime.strptime(deadline_str, "%d.%m.%Y")
+            except ValueError:
+                # Если не удалось распарсить, просто сохраняем как есть
+                pass
+        
+        context.user_data['creating_task']['deadline'] = deadline_str
+        logger.info(f"Срок выполнения получен: {deadline_str}")
         
         text = (
             "📝 **СОЗДАНИЕ НОВОЙ ЗАДАЧИ**\n\n"
@@ -209,9 +238,11 @@ async def receive_assignee(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         text = (
             "📝 **СОЗДАНИЕ НОВОЙ ЗАДАЧИ**\n\n"
             "Шаг 4/5: Дата и время выполнения\n\n"
-            "Введите дату и время в формате:\n"
-            "ДД.ММ.ГГГГ ЧЧ:ММ (например, 25.12.2024 14:30)\n"
-            "Или только дату: ДД.ММ.ГГГГ\n\n"
+            "Введите дату и время:\n"
+            "• ДД.ММ.ГГГГ ЧЧ:ММ (например, 25.12.2024 14:30)\n"
+            "• ДД.ММ.ГГГГ (только дата)\n"
+            "• сегодня до 15:00\n"
+            "• сегодня до 3:00 PM\n\n"
             "Нажмите кнопку для пропуска:"
         )
         
@@ -343,6 +374,22 @@ async def finish_create_task(update: Update, context: ContextTypes.DEFAULT_TYPE)
                         f"👨‍💼 Создатель: @{creator}"
                     )
                     
+                    # Создаем кнопки "Взять в работу" для исполнителей
+                    work_buttons = []
+                    if assignee == "all":
+                        # Если исполнитель "Все", показываем кнопки для всех
+                        work_buttons = [
+                            [InlineKeyboardButton("👤 АГ - Взять в работу", callback_data=f"work_task_{task_id}_AG")],
+                            [InlineKeyboardButton("👤 КА - Взять в работу", callback_data=f"work_task_{task_id}_KA")],
+                            [InlineKeyboardButton("👤 СА - Взять в работу", callback_data=f"work_task_{task_id}_SA")]
+                        ]
+                    else:
+                        # Если конкретный исполнитель, показываем одну кнопку
+                        assignee_full = assignee_names.get(assignee, assignee)
+                        work_buttons = [[InlineKeyboardButton(f"👤 {assignee_full} - Взять в работу", callback_data=f"work_task_{task_id}_{assignee}")]]
+                    
+                    work_keyboard = InlineKeyboardMarkup(work_buttons)
+                    
                     # Отправляем в группу
                     if photo:
                         # Если есть фото, отправляем с фото
@@ -350,6 +397,7 @@ async def finish_create_task(update: Update, context: ContextTypes.DEFAULT_TYPE)
                             chat_id=chat_id,
                             photo=photo,
                             caption=group_text,
+                            reply_markup=work_keyboard,
                             parse_mode='Markdown'
                         )
                     else:
@@ -357,9 +405,10 @@ async def finish_create_task(update: Update, context: ContextTypes.DEFAULT_TYPE)
                         await context.bot.send_message(
                             chat_id=chat_id,
                             text=group_text,
+                            reply_markup=work_keyboard,
                             parse_mode='Markdown'
                         )
-                    logger.info(f"Задача #{task_id} отправлена в группу {chat_id}")
+                    logger.info(f"Задача #{task_id} отправлена в группу {chat_id} с кнопками 'Взять в работу'")
             except Exception as e:
                 logger.error(f"Ошибка отправки задачи в группу: {e}", exc_info=True)
                 # Не прерываем процесс, просто логируем ошибку
