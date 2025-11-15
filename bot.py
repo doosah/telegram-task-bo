@@ -357,8 +357,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.warning("Клавиатура пуста (inline_keyboard is None or empty)")
             await query.answer("✅ Статус обновлен", show_alert=False)
             return
-            # Извлекаем номер задачи из task_id (формат: "0_1" -> номер "1")
-            task_num = task_id.split("_")[-1] if "_" in task_id else task_id
+        
+        # Извлекаем номер задачи из task_id (формат: "0_1" -> номер "1")
+        task_num = task_id.split("_")[-1] if "_" in task_id else task_id
             
             # Ищем текст задачи из кнопки (это надежнее)
             task_text = ""
