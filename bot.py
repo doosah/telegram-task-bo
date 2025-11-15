@@ -297,29 +297,43 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Находим текст задачи из сообщения
         message_text = query.message.text or ""
         
+        # Извлекаем номер задачи из task_id (формат: "0_1" -> номер "1")
+        task_num = task_id.split("_")[-1] if "_" in task_id else task_id
+        
         # Ищем задачу в тексте сообщения
         task_text = ""
         for line in message_text.split("\n"):
-            if line.strip().startswith(f"{task_id.split('_')[1]}.") or (task_id.isdigit() and line.strip().startswith(f"{task_id}.")):
+            line_stripped = line.strip()
+            # Проверяем, начинается ли строка с номера задачи
+            if line_stripped.startswith(f"{task_num}."):
                 # Извлекаем текст задачи (убираем номер и статус)
-                task_text = line.strip()
+                task_text = line_stripped
                 # Убираем номер задачи
                 if "." in task_text:
                     task_text = task_text.split(".", 1)[1].strip()
                 # Убираем статусы если есть
                 task_text = task_text.replace("⚪", "").replace("⏳", "").replace("✅", "").strip()
+                # Убираем markdown форматирование если есть
+                task_text = task_text.replace("**", "").strip()
                 break
         
-        # Если не нашли - используем текст из кнопки
+        # Если не нашли в тексте - используем текст из кнопки
         if not task_text:
-            button_text = ""
             for row in current_markup.inline_keyboard:
                 for button in row:
                     if button.callback_data == f"task_{task_id}":
                         button_text = button.text
-                        # Убираем статус из текста кнопки
-                        task_text = button_text.replace("⚪", "").replace("⏳", "").replace("✅", "").strip()
+                        # Убираем номер и статус из текста кнопки
+                        # Формат: "1. Название задачи ⚪"
+                        if "." in button_text:
+                            task_text = button_text.split(".", 1)[1].strip()
+                        else:
+                            task_text = button_text
+                        # Убираем статусы
+                        task_text = task_text.replace("⚪", "").replace("⏳", "").replace("✅", "").strip()
                         break
+                if task_text:
+                    break
         
         # Обновляем кнопки в текущей клавиатуре
         new_keyboard = []
