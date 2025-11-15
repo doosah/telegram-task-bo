@@ -1146,7 +1146,25 @@ async def start_work_task(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         ]])
         
         await query.answer()
-        await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
+        
+        # Проверяем, это сообщение из группы или личное
+        if query.message and query.message.chat.type in ['group', 'supergroup']:
+            # Это группа - отправляем в личные сообщения
+            try:
+                user = query.from_user
+                await context.bot.send_message(
+                    chat_id=user.id,
+                    text=text,
+                    reply_markup=keyboard,
+                    parse_mode='Markdown'
+                )
+                await query.answer("✅ Информация отправлена в личные сообщения")
+            except Exception as e:
+                logger.error(f"Ошибка отправки в личные сообщения: {e}", exc_info=True)
+                await query.answer("❌ Не удалось отправить. Напишите боту в личные сообщения.")
+        else:
+            # Это личное сообщение - редактируем
+            await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
         
         logger.info(f"Начало работы с задачей #{task_id} для исполнителя {assignee}")
         # Возвращаем -1, так как кнопка "work_done" будет обработана через entry_points

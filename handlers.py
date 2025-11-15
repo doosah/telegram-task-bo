@@ -208,9 +208,26 @@ async def handle_presence_callback(query, data: str, context: ContextTypes.DEFAU
             time_str = datetime.now().strftime("%H:%M")
             db.save_presence(username, user_id, "here", time=time_str)
             
-            text = f"✅ **@{username}** на рабочем месте\n⏰ Время: {time_str}"
-            await query.edit_message_text(text, parse_mode='Markdown')
-            await query.answer("✅ Отметка сохранена!")
+            # Отправляем ответ в личные сообщения боту, а не редактируем сообщение в группе
+            try:
+                # Проверяем, это сообщение из группы или личное
+                if query.message and query.message.chat.type in ['group', 'supergroup']:
+                    # Это группа - отправляем ответ в личные сообщения
+                    text = f"✅ **@{username}** на рабочем месте\n⏰ Время: {time_str}"
+                    await context.bot.send_message(
+                        chat_id=user_id,
+                        text=text,
+                        parse_mode='Markdown'
+                    )
+                    await query.answer("✅ Отметка сохранена! Ответ отправлен в личные сообщения.")
+                else:
+                    # Это личное сообщение - редактируем
+                    text = f"✅ **@{username}** на рабочем месте\n⏰ Время: {time_str}"
+                    await query.edit_message_text(text, parse_mode='Markdown')
+                    await query.answer("✅ Отметка сохранена!")
+            except Exception as e:
+                logger.error(f"Ошибка отправки ответа в личные сообщения: {e}", exc_info=True)
+                await query.answer("✅ Отметка сохранена!")
         
         elif data == "presence_late":
             # Опаздываю - показываем меню выбора времени
@@ -256,16 +273,38 @@ async def handle_delay_callback(query, data: str, context: ContextTypes.DEFAULT_
             minute = int(parts[3])
             delay_minutes = hour * 60 + minute
             context.user_data['delay_minutes'] = delay_minutes
+            context.user_data['delay_hour'] = hour
+            context.user_data['delay_minute'] = minute
             
-            text = (
-                f"⏰ **ОПОЗДАНИЕ**\n\n"
-                f"Выбрано: {hour}ч {minute}м\n\n"
-                f"Введите краткую причину опоздания (одним сообщением):"
-            )
+            # Проверяем, это сообщение из группы или личное
+            if query.message and query.message.chat.type in ['group', 'supergroup']:
+                # Это группа - отправляем запрос в личные сообщения
+                text = (
+                    f"⏰ **ОПОЗДАНИЕ**\n\n"
+                    f"Выбрано: {hour}ч {minute}м\n\n"
+                    f"Введите краткую причину опоздания (одним сообщением):"
+                )
+                try:
+                    await context.bot.send_message(
+                        chat_id=user_id,
+                        text=text,
+                        parse_mode='Markdown'
+                    )
+                    await query.answer("✅ Введите причину в личные сообщения боту")
+                except Exception as e:
+                    logger.error(f"Ошибка отправки запроса в личные сообщения: {e}", exc_info=True)
+                    await query.answer("❌ Не удалось отправить запрос. Напишите боту в личные сообщения.")
+            else:
+                # Это личное сообщение - редактируем
+                text = (
+                    f"⏰ **ОПОЗДАНИЕ**\n\n"
+                    f"Выбрано: {hour}ч {minute}м\n\n"
+                    f"Введите краткую причину опоздания (одним сообщением):"
+                )
+                await query.edit_message_text(text, parse_mode='Markdown')
+                await query.answer()
+            
             context.user_data['waiting_reason'] = True
-            await query.edit_message_text(text, parse_mode='Markdown')
-            await query.answer()
-            # Здесь нужно будет использовать ConversationHandler для получения причины
     
     except Exception as e:
         logger.error(f"Ошибка в handle_delay_callback: {e}", exc_info=True)

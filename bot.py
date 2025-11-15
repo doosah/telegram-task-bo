@@ -312,6 +312,56 @@ def create_task_keyboard(task_text: str, task_id: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(buttons)
 
 
+async def handle_delay_reason(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка причины опоздания"""
+    try:
+        if not context.user_data.get('waiting_reason'):
+            return
+        
+        reason = update.message.text
+        user = update.effective_user
+        username = user.username if user.username else f"user_{user.id}"
+        user_id = user.id
+        
+        delay_minutes = context.user_data.get('delay_minutes', 0)
+        hour = context.user_data.get('delay_hour', 0)
+        minute = context.user_data.get('delay_minute', 0)
+        
+        # Сохраняем в БД
+        if 'db' in context.bot_data:
+            db = context.bot_data['db']
+        else:
+            from database import Database
+            db = Database()
+        
+        from datetime import datetime
+        time_str = datetime.now().strftime("%H:%M")
+        db.save_presence(username, user_id, "late", time=time_str, delay_minutes=delay_minutes, reason=reason)
+        
+        # Отправляем подтверждение в личные сообщения
+        text = (
+            f"✅ **ОПОЗДАНИЕ ЗАФИКСИРОВАНО**\n\n"
+            f"⏰ Время опоздания: {hour}ч {minute}м\n"
+            f"📝 Причина: {reason}\n"
+            f"🕐 Время отметки: {time_str}"
+        )
+        
+        await update.message.reply_text(text, parse_mode='Markdown')
+        
+        # Очищаем данные
+        context.user_data.pop('waiting_reason', None)
+        context.user_data.pop('delay_minutes', None)
+        context.user_data.pop('delay_hour', None)
+        context.user_data.pop('delay_minute', None)
+        
+        logger.info(f"Опоздание сохранено для {username}: {hour}ч {minute}м, причина: {reason}")
+        
+    except Exception as e:
+        logger.error(f"Ошибка в handle_delay_reason: {e}", exc_info=True)
+        if update.message:
+            await update.message.reply_text("❌ Произошла ошибка при сохранении опоздания")
+
+
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка нажатий на кнопки"""
     try:
@@ -455,9 +505,9 @@ async def send_morning_tasks(app, force_weekend=False):
                 # Пропускаем эту задачу
                 continue
             
-            # ОПТИМИЗАЦИЯ ДЛЯ МОБИЛЬНЫХ: ограничиваем длину текста кнопки до 30 символов
+            # ОПТИМИЗАЦИЯ ДЛЯ МОБИЛЬНЫХ: ограничиваем длину текста кнопки до 20 символов
             # Это обеспечит полную видимость на мобильных устройствах
-            max_mobile_length = 30
+            max_mobile_length = 20
             if len(task) > max_mobile_length:
                 # Укорачиваем текст задачи для мобильных
                 task_short = task[:max_mobile_length-3] + "..."
@@ -466,8 +516,8 @@ async def send_morning_tasks(app, force_weekend=False):
                 button_text = f"{i}. {task} ⚪"
             
             # Дополнительная проверка на случай, если номер задачи делает текст слишком длинным
-            if len(button_text) > 35:  # Оставляем запас
-                max_text_len = 35 - len(f"{i}. ⚪")
+            if len(button_text) > 25:  # Оставляем запас для мобильных
+                max_text_len = 25 - len(f"{i}. ⚪")
                 task_short = task[:max_text_len-3] + "..."
                 button_text = f"{i}. {task_short} ⚪"
                 logger.warning(f"Текст кнопки для задачи {i} укорочен для мобильных: '{button_text}'")
