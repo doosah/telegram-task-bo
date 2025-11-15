@@ -839,6 +839,14 @@ def main():
         application.add_handler(CommandHandler("force_morning", force_morning_command))
         logger.info("Обработчик /force_morning зарегистрирован")
         
+        # Регистрируем обработчик причины опоздания (должен быть ДО ConversationHandlers)
+        # Этот обработчик будет перехватывать текстовые сообщения, когда пользователь вводит причину опоздания
+        application.add_handler(MessageHandler(
+            filters.TEXT & ~filters.COMMAND,
+            handle_delay_reason
+        ), group=1)  # Группа 1, чтобы он обрабатывался после ConversationHandlers
+        logger.info("Обработчик причины опоздания зарегистрирован")
+        
         # Регистрируем ConversationHandler для создания задач
         from conversations import (
             TITLE, DESCRIPTION, ASSIGNEE, DEADLINE, PHOTO,

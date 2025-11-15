@@ -1195,7 +1195,25 @@ async def work_done_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             InlineKeyboardButton("❌ Отмена", callback_data="cancel_work_task")
         ]])
         
-        await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
+        # Проверяем, это сообщение из группы или личное
+        if query.message and query.message.chat.type in ['group', 'supergroup']:
+            # Это группа - отправляем в личные сообщения
+            try:
+                user = query.from_user
+                await context.bot.send_message(
+                    chat_id=user.id,
+                    text=text,
+                    reply_markup=keyboard,
+                    parse_mode='Markdown'
+                )
+                await query.answer("✅ Информация отправлена в личные сообщения")
+            except Exception as e:
+                logger.error(f"Ошибка отправки в личные сообщения: {e}", exc_info=True)
+                await query.answer("❌ Не удалось отправить. Напишите боту в личные сообщения.")
+        else:
+            # Это личное сообщение - редактируем
+            await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
+        
         return WORK_RESULT
         
     except Exception as e:
@@ -1222,7 +1240,20 @@ async def receive_work_result(update: Update, context: ContextTypes.DEFAULT_TYPE
             InlineKeyboardButton("❌ Отмена", callback_data="cancel_work_task")
         ]])
         
-        await update.message.reply_text(text, reply_markup=keyboard, parse_mode='Markdown')
+        # Отправляем в личные сообщения пользователю
+        user = update.effective_user
+        user_id = user.id if user else None
+        
+        if user_id:
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=text,
+                reply_markup=keyboard,
+                parse_mode='Markdown'
+            )
+        else:
+            await update.message.reply_text(text, reply_markup=keyboard, parse_mode='Markdown')
+        
         return WORK_PHOTO
         
     except Exception as e:
@@ -1305,23 +1336,37 @@ async def receive_work_photo(update: Update, context: ContextTypes.DEFAULT_TYPE)
             InlineKeyboardButton("🔙 В главное меню", callback_data="menu_main")
         ]])
         
-        # Если есть фото, отправляем его вместе с текстом
+        # Отправляем ответ в личные сообщения пользователю (не в группу)
+        user = update.effective_user
+        user_id = user.id if user else None
+        
+        if not user_id:
+            logger.error("Не удалось получить user_id для отправки ответа")
+            return -1
+        
+        # Если есть фото, отправляем его вместе с текстом в личные сообщения
         if photo_file_id:
-            await update.message.reply_photo(
+            await context.bot.send_photo(
+                chat_id=user_id,
                 photo=photo_file_id,
                 caption=text,
                 reply_markup=keyboard,
                 parse_mode='Markdown'
             )
         else:
-            await update.message.reply_text(text, reply_markup=keyboard, parse_mode='Markdown')
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=text,
+                reply_markup=keyboard,
+                parse_mode='Markdown'
+            )
         
         # Очищаем данные
         context.user_data.pop('working_task_id', None)
         context.user_data.pop('working_assignee', None)
         context.user_data.pop('working_result', None)
         
-        logger.info(f"Задача #{task_id} завершена через 'Взять в работу'")
+        logger.info(f"Задача #{task_id} завершена через 'Взять в работу', ответ отправлен в личные сообщения пользователю {user_id}")
         return -1  # Завершаем диалог
         
     except Exception as e:
@@ -1367,8 +1412,26 @@ async def skip_work_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             InlineKeyboardButton("🔙 В главное меню", callback_data="menu_main")
         ]])
         
-        await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
-        await query.answer("✅ Задача успешно завершена!")
+        # Отправляем ответ в личные сообщения пользователю (не в группу)
+        user = query.from_user
+        user_id = user.id if user else None
+        
+        if user_id:
+            try:
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text=text,
+                    reply_markup=keyboard,
+                    parse_mode='Markdown'
+                )
+                await query.answer("✅ Задача завершена! Ответ отправлен в личные сообщения.")
+            except Exception as e:
+                logger.error(f"Ошибка отправки ответа в личные сообщения: {e}", exc_info=True)
+                await query.answer("✅ Задача завершена!")
+        else:
+            # Если не удалось получить user_id, редактируем сообщение
+            await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
+            await query.answer("✅ Задача успешно завершена!")
         
         # Очищаем данные
         context.user_data.pop('working_task_id', None)
