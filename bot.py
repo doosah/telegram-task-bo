@@ -20,7 +20,6 @@ import pytz
 # Импортируем наши модули
 from database import Database
 from tasks import Tasks
-from scheduler import Scheduler
 
 # Настройка логирования (записи о работе бота)
 logging.basicConfig(
@@ -37,7 +36,6 @@ ADMIN_USERNAME = os.getenv('ADMIN_USERNAME', 'Doosahyasno')
 # Инициализация базы данных и задач
 db = Database()
 tasks_manager = Tasks()
-scheduler_manager = Scheduler()
 
 # Часовой пояс (Москва)
 MOSCOW_TZ = pytz.timezone('Europe/Moscow')
