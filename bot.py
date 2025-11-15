@@ -944,6 +944,92 @@ async def send_presence_buttons(app: Application, force_weekend=False):
         logger.error(f"❌ Ошибка отправки кнопок присутствия: {type(e).__name__}: {e}", exc_info=True)
 
 
+async def send_presence_reminder(app: Application):
+    """Напоминание о присутствии в 08:30 для тех, кто не отметился"""
+    try:
+        today = datetime.now(MOSCOW_TZ).weekday()
+        
+        if today > 4:  # Выходной
+            return
+        
+        db = app.bot_data.get('db')
+        if not db:
+            logger.error("База данных не найдена в bot_data")
+            return
+        
+        # Получаем список всех пользователей
+        all_users = [
+            {"username": "alex301182", "name": "Lysenko Alexander", "user_id": None},
+            {"username": "Korudirp", "name": "Ruslan Cherenkov", "user_id": None},
+            {"username": "sanya_hui_sosi1488", "name": "Test", "user_id": None}
+        ]
+        
+        # Получаем user_id для каждого пользователя
+        for user in all_users:
+            user_id = db.get_user_id_by_username(user["username"])
+            if user_id:
+                user["user_id"] = user_id
+        
+        # Получаем дату сегодня в формате YYYY-MM-DD
+        today_str = datetime.now(MOSCOW_TZ).strftime("%Y-%m-%d")
+        
+        # Проверяем, кто отметился сегодня
+        marked_users = set()
+        try:
+            from database import db_lock
+            with db_lock:
+                conn = db.get_connection()
+                try:
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        'SELECT username FROM presence WHERE date = ?',
+                        (today_str,)
+                    )
+                    results = cursor.fetchall()
+                    marked_users = {row[0] for row in results}
+                finally:
+                    conn.close()
+        except Exception as e:
+            logger.error(f"Ошибка получения списка отметившихся: {e}", exc_info=True)
+        
+        # Находим тех, кто не отметился
+        not_marked = [user for user in all_users if user["username"] not in marked_users and user["user_id"]]
+        
+        if not not_marked:
+            logger.info("Все пользователи отметили присутствие")
+            return
+        
+        # Отправляем напоминание в общий чат
+        chat_id = app.bot_data.get('CHAT_ID')
+        if not chat_id:
+            import os
+            chat_id = os.getenv('CHAT_ID', '').strip()
+        
+        if chat_id:
+            chat_id = int(chat_id) if isinstance(chat_id, str) else chat_id
+            
+            names = [user["name"] for user in not_marked]
+            if len(names) == 1:
+                message = f"⏰ **НАПОМИНАНИЕ О ПРИСУТСТВИИ**\n\n{names[0]}, пожалуйста, отметьте своё присутствие на рабочем месте."
+            else:
+                names_str = ", ".join(names)
+                message = f"⏰ **НАПОМИНАНИЕ О ПРИСУТСТВИИ**\n\n{names_str}, пожалуйста, отметьте своё присутствие на рабочем месте."
+            
+            try:
+                await app.bot.send_message(
+                    chat_id=chat_id,
+                    text=message,
+                    parse_mode='Markdown',
+                    reply_markup=get_presence_menu()
+                )
+                logger.info(f"✅ Напоминание о присутствии отправлено в чат {chat_id} для {len(not_marked)} пользователей")
+            except Exception as e:
+                logger.error(f"❌ Ошибка отправки напоминания о присутствии: {e}", exc_info=True)
+    
+    except Exception as e:
+        logger.error(f"❌ КРИТИЧЕСКАЯ ОШИБКА в send_presence_reminder: {e}", exc_info=True)
+
+
 def setup_scheduler(app: Application):
     """Настройка расписания отправки сообщений"""
     scheduler = AsyncIOScheduler(timezone=MOSCOW_TZ)
@@ -969,9 +1055,16 @@ def setup_scheduler(app: Application):
         args=[app]
     )
     
-    # 08:30 - кнопки присутствия
+    # 07:50 - кнопки присутствия
     scheduler.add_job(
         send_presence_buttons,
+        trigger=CronTrigger(hour=7, minute=50, day_of_week='mon-fri'),
+        args=[app]
+    )
+    
+    # 08:30 - напоминание о присутствии для тех, кто не отметился
+    scheduler.add_job(
+        send_presence_reminder,
         trigger=CronTrigger(hour=8, minute=30, day_of_week='mon-fri'),
         args=[app]
     )
@@ -1013,7 +1106,7 @@ def setup_scheduler(app: Application):
     )
     
     scheduler.start()
-    logger.info("Расписание настроено: 08:30 (присутствие), 08:00, 13:00, 16:50 (пн-пт), напоминания о ручных задачах")
+    logger.info("Расписание настроено: 07:50 (присутствие), 08:00, 08:30 (напоминание о присутствии), 13:00, 16:50 (пн-пт), напоминания о ручных задачах")
 
 
 def main():
