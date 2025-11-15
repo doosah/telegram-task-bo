@@ -25,7 +25,7 @@ import pytz
 from database import Database
 from tasks import Tasks
 from menu import (
-    get_main_menu, get_tasks_menu, get_task_actions_menu,
+    get_main_menu, get_testing_menu, get_tasks_menu, get_task_actions_menu,
     get_confirm_menu, get_assignee_menu, get_presence_menu,
     get_delay_time_menu, get_delay_minutes_menu
 )
@@ -692,6 +692,11 @@ def main():
         # Сохраняем глобальный экземпляр db в bot_data для использования в ConversationHandlers
         application.bot_data['db'] = db
         logger.info("Глобальный экземпляр db сохранен в bot_data")
+        
+        # Сохраняем функции для тестирования
+        application.bot_data['send_morning_tasks'] = send_morning_tasks
+        application.bot_data['send_presence_buttons'] = send_presence_buttons
+        logger.info("Функции тестирования сохранены в bot_data")
         
         # Регистрируем обработчики команд
         application.add_handler(CommandHandler("start", start_command))

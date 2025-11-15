@@ -8,21 +8,43 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Экспортируем get_testing_menu для использования в handlers.py
+__all__ = [
+    'get_main_menu', 'get_testing_menu', 'get_tasks_menu', 
+    'get_task_actions_menu', 'get_confirm_menu', 'get_assignee_menu',
+    'get_presence_menu', 'get_delay_time_menu', 'get_delay_minutes_menu'
+]
+
 
 def get_main_menu() -> InlineKeyboardMarkup:
     """Главное меню бота"""
     keyboard = [
         [
-            InlineKeyboardButton("📝 Создать задачу", callback_data="menu_create_task"),
-            InlineKeyboardButton("📋 Просмотреть задачи", callback_data="menu_view_tasks")
+            InlineKeyboardButton("📝 Создать задачу", callback_data="menu_create_task")
         ],
         [
-            InlineKeyboardButton("✅ Завершить задачу", callback_data="menu_complete_task"),
-            InlineKeyboardButton("⚙️ Настройки", callback_data="menu_settings")
+            InlineKeyboardButton("🧪 Тестирование", callback_data="menu_testing"),
+            InlineKeyboardButton("❓ Помощь", callback_data="menu_help")
+        ]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+
+def get_testing_menu() -> InlineKeyboardMarkup:
+    """Меню тестирования"""
+    keyboard = [
+        [
+            InlineKeyboardButton("📋 Ежедневные задачи", callback_data="test_daily_tasks")
         ],
         [
-            InlineKeyboardButton("❓ Помощь", callback_data="menu_help"),
-            InlineKeyboardButton("🔙 Назад", callback_data="menu_back")
+            InlineKeyboardButton("✅ Прибытие", callback_data="test_presence_here"),
+            InlineKeyboardButton("⏰ Задержка", callback_data="test_presence_late")
+        ],
+        [
+            InlineKeyboardButton("👥 Контроль сотрудников", callback_data="test_employees")
+        ],
+        [
+            InlineKeyboardButton("🔙 Назад в меню", callback_data="menu_main")
         ]
     ]
     return InlineKeyboardMarkup(keyboard)

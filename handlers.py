@@ -71,18 +71,95 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
             ]])
             await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
         
+        elif data == "menu_testing":
+            from menu import get_testing_menu
+            text = (
+                "🧪 **ТЕСТИРОВАНИЕ**\n\n"
+                "Выберите действие для тестирования:"
+            )
+            await query.edit_message_text(text, reply_markup=get_testing_menu(), parse_mode='Markdown')
+        
         elif data == "menu_help":
             text = (
                 "❓ **ПОМОЩЬ**\n\n"
-                "📝 **Создать задачу** - добавить новую задачу\n"
-                "📋 **Просмотреть задачи** - список ваших задач\n"
-                "✅ **Завершить задачу** - отметить задачу как выполненную\n"
-                "⚙️ **Настройки** - настройки бота\n\n"
+                "📝 **Создать задачу** - добавить новую задачу\n\n"
+                "🧪 **Тестирование** - тестовые функции бота\n\n"
                 "⏰ **Отметка присутствия**\n"
                 "Каждый день в 07:50 в общем чате появляются кнопки для отметки присутствия."
             )
             keyboard = InlineKeyboardMarkup([[
                 InlineKeyboardButton("🔙 Назад в меню", callback_data="menu_main")
+            ]])
+            await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
+        
+        elif data == "test_daily_tasks":
+            # Тестовая отправка ежедневных задач
+            # Используем функции из bot_data, если они там есть
+            if 'send_morning_tasks' in context.bot_data:
+                send_morning_tasks = context.bot_data['send_morning_tasks']
+                class AppWrapper:
+                    def __init__(self, bot):
+                        self.bot = bot
+                app_wrapper = AppWrapper(context.bot)
+                try:
+                    await send_morning_tasks(app_wrapper, force_weekend=True)
+                    await query.answer("✅ Ежедневные задачи отправлены в группу!")
+                    text = "✅ **ЕЖЕДНЕВНЫЕ ЗАДАЧИ**\n\nЗадачи успешно отправлены в группу!"
+                except Exception as e:
+                    logger.error(f"Ошибка отправки ежедневных задач: {e}", exc_info=True)
+                    await query.answer("❌ Ошибка отправки задач", show_alert=True)
+                    text = f"❌ **ОШИБКА**\n\nНе удалось отправить задачи: {e}"
+            else:
+                # Если функции нет в bot_data, используем команду /force_morning
+                text = "✅ **ЕЖЕДНЕВНЫЕ ЗАДАЧИ**\n\nИспользуйте команду /force_morning для отправки задач."
+            
+            keyboard = InlineKeyboardMarkup([[
+                InlineKeyboardButton("🔙 К тестированию", callback_data="menu_testing")
+            ]])
+            await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
+        
+        elif data == "test_presence_here" or data == "test_presence_late":
+            # Тестовая отправка кнопок присутствия
+            if 'send_presence_buttons' in context.bot_data:
+                send_presence_buttons = context.bot_data['send_presence_buttons']
+                class AppWrapper:
+                    def __init__(self, bot):
+                        self.bot = bot
+                app_wrapper = AppWrapper(context.bot)
+                try:
+                    await send_presence_buttons(app_wrapper)
+                    await query.answer("✅ Кнопки присутствия отправлены в группу!")
+                    text = "✅ **КНОПКИ ПРИСУТСТВИЯ**\n\nКнопки успешно отправлены в группу!"
+                except Exception as e:
+                    logger.error(f"Ошибка отправки кнопок присутствия: {e}", exc_info=True)
+                    await query.answer("❌ Ошибка отправки кнопок", show_alert=True)
+                    text = f"❌ **ОШИБКА**\n\nНе удалось отправить кнопки: {e}"
+            else:
+                text = "✅ **КНОПКИ ПРИСУТСТВИЯ**\n\nКнопки будут отправлены автоматически в 07:50."
+            
+            keyboard = InlineKeyboardMarkup([[
+                InlineKeyboardButton("🔙 К тестированию", callback_data="menu_testing")
+            ]])
+            await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
+        
+        elif data == "test_employees":
+            # Контроль сотрудников - показываем список пользователей и их статусы
+            user_mapping = {
+                "alex301182": {"initials": "AG", "name": "АГ"},
+                "Korudirp": {"initials": "KA", "name": "КА"},
+                "sanya_hui_sosi1488": {"initials": "SA", "name": "СА"}
+            }
+            
+            text = "👥 **КОНТРОЛЬ СОТРУДНИКОВ**\n\n"
+            for username, info in user_mapping.items():
+                user_id = db.get_user_id_by_username(username)
+                status = "✅ Зарегистрирован" if user_id else "⚪ Не зарегистрирован"
+                text += f"**{info['name']}** (@{username})\n"
+                text += f"ID: {user_id if user_id else 'Не установлен'}\n"
+                text += f"Статус: {status}\n\n"
+            
+            keyboard = InlineKeyboardMarkup([[
+                InlineKeyboardButton("🔙 К тестированию", callback_data="menu_testing")
             ]])
             await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
         
@@ -241,11 +318,169 @@ async def handle_new_task_callback(query, data: str, context: ContextTypes.DEFAU
 
 
 async def handle_old_task_callback(query, data: str, context: ContextTypes.DEFAULT_TYPE, db):
-    """Обработка старых задач (существующая логика)"""
-    # Эта функция будет содержать весь старый код из button_callback
-    # Пока оставляем заглушку - старая логика уже удалена из bot.py
-    # Если нужно, можно перенести её сюда позже
-    await query.answer("Обработка старых задач...")
+    """Обработка старых задач (формат task_0_1)"""
+    try:
+        await query.answer()
+        
+        # Парсим task_id (формат: task_0_1 -> task_id = "0_1")
+        parts = data.split("_")
+        if len(parts) < 3:
+            logger.error(f"Неверный формат task_id: {data}, parts={parts}")
+            await query.answer("❌ Ошибка формата", show_alert=True)
+            return
+        
+        task_id = "_".join(parts[1:])  # "0_1"
+        logger.info(f"Обработка старой задачи: task_id={task_id}")
+        
+        # Определяем пользователя
+        user = query.from_user
+        if not user:
+            await query.answer("❌ Пользователь не найден", show_alert=True)
+            return
+        
+        username = user.username if user.username else f"user_{user.id}"
+        user_id = user.id
+        
+        # Маппинг пользователей
+        user_mapping = {
+            "alex301182": {"initials": "AG", "name": "АГ"},
+            "Korudirp": {"initials": "KA", "name": "КА"},
+            "sanya_hui_sosi1488": {"initials": "SA", "name": "СА"}
+        }
+        
+        # Определяем инициалы пользователя
+        user_info = user_mapping.get(username)
+        if not user_info:
+            # Пробуем найти по user_id
+            for uname, info in user_mapping.items():
+                stored_id = db.get_user_id_by_username(uname)
+                if stored_id == user_id:
+                    user_info = info
+                    username = uname
+                    break
+        
+        if not user_info:
+            await query.answer("❌ Вы не авторизованы для работы с задачами", show_alert=True)
+            return
+        
+        initials = user_info["initials"]
+        logger.info(f"Пользователь: {username} ({initials})")
+        
+        # Сохраняем user_id в БД
+        db.save_user_id(username, user_id, initials)
+        logger.info(f"ID пользователя сохранен в БД")
+        
+        # Получаем текущий статус пользователя для этой задачи
+        status_key = f"{task_id}_{initials}"
+        current_status = db.get_task_status(status_key)
+        logger.info(f"Текущий статус для {status_key}: {current_status}")
+        
+        # Циклически меняем статус: ⚪ → ⏳ → ✅ → ⚪
+        status_cycle = {"⚪": "⏳", "⏳": "✅", "✅": "⚪"}
+        new_status = status_cycle.get(current_status, "⚪")
+        
+        # Сохраняем новый статус
+        db.set_task_status(status_key, new_status)
+        logger.info(f"Новый статус для {status_key}: {new_status}")
+        
+        # Получаем статусы всех пользователей для этой задачи
+        status_ag = db.get_task_status(f"{task_id}_AG")
+        status_ka = db.get_task_status(f"{task_id}_KA")
+        status_sa = db.get_task_status(f"{task_id}_SA")
+        
+        logger.info(f"Статусы: AG={status_ag}, KA={status_ka}, SA={status_sa}")
+        
+        # Определяем общий статус задачи
+        # ✅ только если все выполнили
+        if status_ag == "✅" and status_ka == "✅" and status_sa == "✅":
+            overall_status = "✅"
+        elif status_ag != "⚪" or status_ka != "⚪" or status_sa != "⚪":
+            overall_status = "⏳"
+        else:
+            overall_status = "⚪"
+        
+        logger.info(f"Общий статус задачи: {overall_status}")
+        
+        # Обновляем кнопку в сообщении
+        message = query.message
+        if not message or not message.text:
+            logger.error("Не удалось получить сообщение для обновления")
+            return
+        
+        # Извлекаем оригинальный текст задачи из сообщения
+        message_lines = message.text.split("\n")
+        task_text = None
+        task_number = None
+        
+        # Ищем строку с задачей (формат: "1. Название задачи")
+        for line in message_lines:
+            if line.strip().startswith(f"{task_id.split('_')[1]}."):
+                task_text = line.split(".", 1)[1].strip()
+                task_number = task_id.split("_")[1]
+                break
+        
+        if not task_text:
+            # Если не нашли, пытаемся извлечь из текущего текста кнопки
+            if message.reply_markup and message.reply_markup.inline_keyboard:
+                for row in message.reply_markup.inline_keyboard:
+                    for button in row:
+                        if button.callback_data == data:
+                            # Убираем статус из текста кнопки
+                            button_text = button.text
+                            # Убираем эмодзи статуса в конце
+                            for status_emoji in ["⚪", "⏳", "✅"]:
+                                if button_text.endswith(f" {status_emoji}"):
+                                    task_text = button_text[:-2].strip()
+                                    # Убираем номер задачи если есть
+                                    if task_text.startswith(f"{task_id.split('_')[1]}."):
+                                        task_text = task_text.split(".", 1)[1].strip()
+                                    break
+                            break
+        
+        if not task_text:
+            logger.error(f"Не удалось извлечь текст задачи для task_id={task_id}")
+            await query.answer("❌ Ошибка обновления", show_alert=True)
+            return
+        
+        # Формируем новый текст кнопки
+        # ОПТИМИЗАЦИЯ ДЛЯ МОБИЛЬНЫХ: ограничиваем длину до 30 символов
+        max_mobile_length = 30
+        if len(task_text) > max_mobile_length:
+            task_text_short = task_text[:max_mobile_length-3] + "..."
+            button_text = f"{task_number}. {task_text_short} {overall_status}" if task_number else f"{task_text_short} {overall_status}"
+        else:
+            button_text = f"{task_number}. {task_text} {overall_status}" if task_number else f"{task_text} {overall_status}"
+        
+        # Обновляем клавиатуру
+        current_markup = message.reply_markup
+        if not current_markup or not current_markup.inline_keyboard:
+            logger.error("Не удалось получить клавиатуру для обновления")
+            return
+        
+        # Находим и обновляем нужную кнопку
+        new_keyboard = []
+        for row in current_markup.inline_keyboard:
+            new_row = []
+            for button in row:
+                if button.callback_data == data:
+                    # Обновляем эту кнопку
+                    from telegram import InlineKeyboardButton
+                    new_row.append(InlineKeyboardButton(button_text, callback_data=data))
+                else:
+                    new_row.append(button)
+            if new_row:
+                new_keyboard.append(new_row)
+        
+        from telegram import InlineKeyboardMarkup
+        await query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup(new_keyboard))
+        logger.info(f"Кнопка обновлена: {button_text}")
+        
+    except Exception as e:
+        logger.error(f"Ошибка в handle_old_task_callback: {e}", exc_info=True)
+        try:
+            await query.answer("❌ Произошла ошибка", show_alert=True)
+        except:
+            pass
 
 
 async def handle_confirm_callback(query, data: str, context: ContextTypes.DEFAULT_TYPE, db, get_task_actions_menu, get_tasks_menu):
