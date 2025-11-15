@@ -780,8 +780,8 @@ def main():
         
         complete_task_conv = ConversationHandler(
             entry_points=[
-                CallbackQueryHandler(start_complete_task, pattern="^task_complete_"),
-                CallbackQueryHandler(complete_fast, pattern="^task_complete_fast_")
+                CallbackQueryHandler(start_complete_task, pattern="^task_complete_[0-9]+$"),
+                CallbackQueryHandler(complete_fast, pattern="^task_complete_fast_[0-9]+$")
             ],
             states={
                 COMPLETE_RESULT: [

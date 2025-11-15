@@ -186,7 +186,7 @@ async def skip_deadline(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         return -1
 
 
-async def receive_assignee(update: Update, context: ContextTypes.DEFAULT_TYPE, db) -> int:
+async def receive_assignee(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Получение исполнителя и завершение создания задачи"""
     try:
         assignee = update.callback_query.data.split("_")[1] if update.callback_query else "all"
@@ -273,5 +273,314 @@ async def cancel_create_task(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return -1  # Завершаем диалог
     except Exception as e:
         logger.error(f"Ошибка в cancel_create_task: {e}", exc_info=True)
+        return -1
+
+
+# ========== ЗАВЕРШЕНИЕ ЗАДАЧИ С РЕЗУЛЬТАТОМ ==========
+
+async def start_complete_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Начало завершения задачи - запрос результата"""
+    try:
+        query = update.callback_query
+        if not query:
+            return -1
+        
+        # Извлекаем task_id из callback_data (формат: task_complete_1)
+        task_id = int(query.data.split("_")[-1])
+        context.user_data['completing_task_id'] = task_id
+        
+        # Получаем задачу из БД
+        from database import Database
+        db = Database()
+        task = db.get_custom_task(task_id)
+        
+        if not task:
+            await query.answer("❌ Задача не найдена", show_alert=True)
+            return -1
+        
+        text = (
+            f"✅ **ЗАВЕРШЕНИЕ ЗАДАЧИ #{task_id}**\n\n"
+            f"Задача: **{task['title']}**\n\n"
+            f"Шаг 1/2: Результат выполнения\n\n"
+            f"Опишите результат выполнения задачи (или отправьте /skip для пропуска):"
+        )
+        
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("⏭️ Пропустить", callback_data="skip_complete_result"),
+            InlineKeyboardButton("⚡ Быстро завершить", callback_data="complete_fast")
+        ]])
+        
+        await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
+        return COMPLETE_RESULT
+    except Exception as e:
+        logger.error(f"Ошибка в start_complete_task: {e}", exc_info=True)
+        return -1
+
+
+async def receive_complete_result(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Получение результата выполнения задачи"""
+    try:
+        result_text = update.message.text.strip()
+        
+        if len(result_text) > 1000:
+            await update.message.reply_text("❌ Текст результата слишком длинный (максимум 1000 символов). Попробуйте снова:")
+            return COMPLETE_RESULT
+        
+        context.user_data['completing_result'] = result_text
+        logger.info(f"Результат выполнения получен: {result_text[:50]}...")
+        
+        task_id = context.user_data.get('completing_task_id')
+        
+        text = (
+            f"✅ **ЗАВЕРШЕНИЕ ЗАДАЧИ #{task_id}**\n\n"
+            f"Шаг 2/2: Фото результата (опционально)\n\n"
+            f"Отправьте фото результата выполнения задачи (или отправьте /skip для пропуска):"
+        )
+        
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("⏭️ Пропустить", callback_data="skip_complete_photo"),
+            InlineKeyboardButton("❌ Отмена", callback_data="cancel_complete_task")
+        ]])
+        
+        await update.message.reply_text(text, reply_markup=keyboard, parse_mode='Markdown')
+        return COMPLETE_PHOTO
+    except Exception as e:
+        logger.error(f"Ошибка в receive_complete_result: {e}", exc_info=True)
+        return -1
+
+
+async def skip_complete_result(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Пропуск результата выполнения"""
+    try:
+        context.user_data['completing_result'] = ""
+        logger.info("Результат выполнения пропущен")
+        
+        query = update.callback_query
+        task_id = context.user_data.get('completing_task_id')
+        
+        text = (
+            f"✅ **ЗАВЕРШЕНИЕ ЗАДАЧИ #{task_id}**\n\n"
+            f"Шаг 2/2: Фото результата (опционально)\n\n"
+            f"Отправьте фото результата выполнения задачи (или отправьте /skip для пропуска):"
+        )
+        
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("⏭️ Пропустить", callback_data="skip_complete_photo"),
+            InlineKeyboardButton("❌ Отмена", callback_data="cancel_complete_task")
+        ]])
+        
+        if query:
+            await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
+        elif update.message:
+            await update.message.reply_text(text, reply_markup=keyboard, parse_mode='Markdown')
+        
+        return COMPLETE_PHOTO
+    except Exception as e:
+        logger.error(f"Ошибка в skip_complete_result: {e}", exc_info=True)
+        return -1
+
+
+async def receive_complete_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Получение фото результата и завершение задачи"""
+    try:
+        if update.message.photo:
+            # Получаем самое большое фото
+            photo = update.message.photo[-1]
+            photo_file_id = photo.file_id
+            context.user_data['completing_photo'] = photo_file_id
+            logger.info(f"Фото результата получено: {photo_file_id}")
+        else:
+            context.user_data['completing_photo'] = None
+        
+        # Завершаем задачу
+        task_id = context.user_data.get('completing_task_id')
+        result_text = context.user_data.get('completing_result', '')
+        photo_file_id = context.user_data.get('completing_photo')
+        
+        # Обновляем задачу в БД
+        from database import Database
+        from datetime import datetime
+        db = Database()
+        db.update_custom_task(
+            task_id,
+            status='completed',
+            completed_at=datetime.now().isoformat(),
+            result_text=result_text if result_text else None,
+            result_photo=photo_file_id if photo_file_id else None
+        )
+        
+        task = db.get_custom_task(task_id)
+        
+        text = (
+            f"✅ **ЗАДАЧА ЗАВЕРШЕНА!**\n\n"
+            f"📝 Задача: {task['title']}\n"
+            f"📄 Результат: {result_text if result_text else 'Не указан'}\n"
+            f"📸 Фото: {'Прикреплено' if photo_file_id else 'Не прикреплено'}\n\n"
+            f"ID задачи: #{task_id}"
+        )
+        
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("🔙 К задачам", callback_data="menu_view_tasks")
+        ]])
+        
+        # Если есть фото, отправляем его вместе с текстом
+        if photo_file_id:
+            await update.message.reply_photo(
+                photo=photo_file_id,
+                caption=text,
+                reply_markup=keyboard,
+                parse_mode='Markdown'
+            )
+        else:
+            await update.message.reply_text(text, reply_markup=keyboard, parse_mode='Markdown')
+        
+        # Очищаем данные
+        context.user_data.pop('completing_task_id', None)
+        context.user_data.pop('completing_result', None)
+        context.user_data.pop('completing_photo', None)
+        
+        logger.info(f"Задача #{task_id} завершена с результатом")
+        return -1  # Завершаем диалог
+        
+    except Exception as e:
+        logger.error(f"Ошибка в receive_complete_photo: {e}", exc_info=True)
+        return -1
+
+
+async def skip_complete_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Пропуск фото и завершение задачи"""
+    try:
+        query = update.callback_query
+        
+        # Завершаем задачу без фото
+        task_id = context.user_data.get('completing_task_id')
+        result_text = context.user_data.get('completing_result', '')
+        
+        # Обновляем задачу в БД
+        from database import Database
+        from datetime import datetime
+        db = Database()
+        db.update_custom_task(
+            task_id,
+            status='completed',
+            completed_at=datetime.now().isoformat(),
+            result_text=result_text if result_text else None,
+            result_photo=None
+        )
+        
+        task = db.get_custom_task(task_id)
+        
+        text = (
+            f"✅ **ЗАДАЧА ЗАВЕРШЕНА!**\n\n"
+            f"📝 Задача: {task['title']}\n"
+            f"📄 Результат: {result_text if result_text else 'Не указан'}\n\n"
+            f"ID задачи: #{task_id}"
+        )
+        
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("🔙 К задачам", callback_data="menu_view_tasks")
+        ]])
+        
+        await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
+        await query.answer("✅ Задача успешно завершена!")
+        
+        # Очищаем данные
+        context.user_data.pop('completing_task_id', None)
+        context.user_data.pop('completing_result', None)
+        context.user_data.pop('completing_photo', None)
+        
+        logger.info(f"Задача #{task_id} завершена без фото")
+        return -1  # Завершаем диалог
+        
+    except Exception as e:
+        logger.error(f"Ошибка в skip_complete_photo: {e}", exc_info=True)
+        return -1
+
+
+async def complete_fast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Быстрое завершение задачи без формы"""
+    try:
+        query = update.callback_query
+        # Извлекаем task_id из callback_data или из context
+        if query and query.data.startswith("task_complete_fast_"):
+            task_id = int(query.data.split("_")[-1])
+        else:
+            task_id = context.user_data.get('completing_task_id')
+        
+        if not task_id:
+            if query:
+                await query.answer("❌ Ошибка: ID задачи не найден", show_alert=True)
+            return -1
+        
+        # Обновляем задачу в БД
+        from database import Database
+        from datetime import datetime
+        db = Database()
+        db.update_custom_task(
+            task_id,
+            status='completed',
+            completed_at=datetime.now().isoformat()
+        )
+        
+        task = db.get_custom_task(task_id)
+        
+        text = (
+            f"✅ **ЗАДАЧА ЗАВЕРШЕНА!**\n\n"
+            f"📝 Задача: {task['title']}\n\n"
+            f"Статус изменен на 'Завершена'\n\n"
+            f"ID задачи: #{task_id}"
+        )
+        
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("🔙 К задачам", callback_data="menu_view_tasks")
+        ]])
+        
+        if query:
+            await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
+            await query.answer("✅ Задача успешно завершена!")
+        
+        # Очищаем данные
+        context.user_data.pop('completing_task_id', None)
+        context.user_data.pop('completing_result', None)
+        context.user_data.pop('completing_photo', None)
+        
+        logger.info(f"Задача #{task_id} быстро завершена")
+        return -1  # Завершаем диалог
+        
+    except Exception as e:
+        logger.error(f"Ошибка в complete_fast: {e}", exc_info=True)
+        if update.callback_query:
+            await update.callback_query.answer("❌ Произошла ошибка", show_alert=True)
+        return -1
+
+
+async def cancel_complete_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Отмена завершения задачи"""
+    try:
+        task_id = context.user_data.pop('completing_task_id', None)
+        context.user_data.pop('completing_result', None)
+        context.user_data.pop('completing_photo', None)
+        
+        text = "❌ Завершение задачи отменено."
+        
+        if task_id:
+            keyboard = InlineKeyboardMarkup([[
+                InlineKeyboardButton("🔙 К задаче", callback_data=f"task_view_{task_id}")
+            ]])
+        else:
+            keyboard = InlineKeyboardMarkup([[
+                InlineKeyboardButton("🔙 В главное меню", callback_data="menu_main")
+            ]])
+        
+        if update.callback_query:
+            await update.callback_query.edit_message_text(text, reply_markup=keyboard)
+            await update.callback_query.answer("Завершение отменено")
+        elif update.message:
+            await update.message.reply_text(text, reply_markup=keyboard)
+        
+        logger.info("Завершение задачи отменено пользователем")
+        return -1  # Завершаем диалог
+    except Exception as e:
+        logger.error(f"Ошибка в cancel_complete_task: {e}", exc_info=True)
         return -1
 
