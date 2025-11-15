@@ -680,12 +680,14 @@ async def send_evening_summary(app: Application):
         logger.error(f"❌ Ошибка отправки итогов дня: {type(e).__name__}: {e}", exc_info=True)
 
 
-async def send_presence_buttons(app: Application):
+async def send_presence_buttons(app: Application, force_weekend=False):
     """Отправка кнопок присутствия в 07:50"""
     try:
         today = datetime.now(MOSCOW_TZ).weekday()
         
-        if today > 4:  # Выходной
+        # Если выходной и не принудительная отправка - не отправляем
+        if today > 4 and not force_weekend:  # Выходной
+            logger.info(f"Сегодня выходной (день {today}), кнопки присутствия не отправляются")
             return
         
         chat_id = int(CHAT_ID) if isinstance(CHAT_ID, str) else CHAT_ID

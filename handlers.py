@@ -167,8 +167,8 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
                 
                 app_wrapper = AppWrapper(context.bot)
                 
-                # Вызываем функцию
-                await send_presence_buttons_func(app_wrapper)
+                # Вызываем функцию с force_weekend=True для тестирования
+                await send_presence_buttons_func(app_wrapper, force_weekend=True)
                 
                 text = "✅ **КОНТРОЛЬ СОТРУДНИКОВ**\n\nКнопки 'На рабочем месте' и 'Опаздываю' отправлены в группу!"
                 
