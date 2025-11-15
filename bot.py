@@ -878,15 +878,15 @@ async def send_evening_summary(app: Application):
         incomplete = []
     
     if not incomplete:
-        message = "✅ **ИТОГИ ДНЯ**\n\nГотово"
+        message = "✅ **ИТОГИ ДНЯ**\n\nВсе задачи выполнены. Хорошей дороги домой."
     else:
-        message = "📊 **ИТОГИ ДНЯ**\n\nНевыполненные задачи (нужно выполнить до 16:50):\n\n"
+        message = "📊 **ИТОГИ ДНЯ**\n\nНевыполненные задачи (нужно завершить сегодня):\n\n"
         # Валидация: Telegram ограничивает длину сообщения до 4096 символов
         max_message_length = 4000  # Оставляем запас
         current_length = len(message)
         
         for idx, item in enumerate(incomplete):
-            task_line = f"• {item['task']} {item['users']}\n"
+            task_line = f"• {item['task']}\n  Исполнитель: {item['users']}\n"
             if current_length + len(task_line) > max_message_length:
                 message += f"\n... и еще {len(incomplete) - idx} задач"
                 logger.warning("Сообщение итогов дня обрезано из-за лимита длины")
@@ -909,7 +909,7 @@ async def send_evening_summary(app: Application):
 
 
 async def send_presence_buttons(app: Application, force_weekend=False):
-    """Отправка кнопок присутствия в 07:50"""
+    """Отправка кнопок присутствия в 08:30"""
     try:
         today = datetime.now(MOSCOW_TZ).weekday()
         
@@ -963,10 +963,10 @@ def setup_scheduler(app: Application):
         args=[app]
     )
     
-    # 07:50 - кнопки присутствия
+    # 08:30 - кнопки присутствия
     scheduler.add_job(
         send_presence_buttons,
-        trigger=CronTrigger(hour=7, minute=50, day_of_week='mon-fri'),
+        trigger=CronTrigger(hour=8, minute=30, day_of_week='mon-fri'),
         args=[app]
     )
     
@@ -1007,7 +1007,7 @@ def setup_scheduler(app: Application):
     )
     
     scheduler.start()
-    logger.info("Расписание настроено: 07:50 (присутствие), 08:00, 13:00, 16:50 (пн-пт), напоминания о ручных задачах")
+    logger.info("Расписание настроено: 08:30 (присутствие), 08:00, 13:00, 16:50 (пн-пт), напоминания о ручных задачах")
 
 
 def main():
