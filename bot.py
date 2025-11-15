@@ -785,6 +785,11 @@ def main():
             name="edit_task_conversation"
         )
         
+        # Регистрируем обработчик кнопок ПОСЛЕ ConversationHandlers
+        # чтобы ConversationHandlers могли перехватить свои callback_data
+        application.add_handler(CallbackQueryHandler(button_callback))
+        logger.info("Обработчик кнопок зарегистрирован")
+        
         application.add_handler(create_task_conv)
         logger.info("ConversationHandler для создания задач зарегистрирован")
         
