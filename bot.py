@@ -88,19 +88,30 @@ async def add_urgent_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
         return
     
-    task_text = " ".join(context.args)
-    urgent_task = f"🔥 {task_text}"
-    
-    # Отправляем задачу в группу
-    keyboard = create_task_keyboard(urgent_task, "urgent")
-    await context.bot.send_message(
-        chat_id=CHAT_ID,
-        text=f"🔥 **ВНЕПЛАНОВАЯ ЗАДАЧА**\n\n{urgent_task}",
-        reply_markup=keyboard,
-        parse_mode='Markdown'
-    )
-    
-    await update.message.reply_text(f"✅ Задача добавлена в группу!")
+    try:
+        task_text = " ".join(context.args)
+        urgent_task = f"🔥 {task_text}"
+        
+        # Преобразуем CHAT_ID в int если это строка
+        chat_id = int(CHAT_ID) if isinstance(CHAT_ID, str) else CHAT_ID
+        
+        logger.info(f"Отправка срочной задачи в чат {chat_id}: {urgent_task}")
+        
+        # Отправляем задачу в группу
+        keyboard = create_task_keyboard(urgent_task, "urgent")
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"🔥 **ВНЕПЛАНОВАЯ ЗАДАЧА**\n\n{urgent_task}",
+            reply_markup=keyboard,
+            parse_mode='Markdown'
+        )
+        
+        await update.message.reply_text(f"✅ Задача добавлена в группу!")
+        logger.info("Срочная задача успешно отправлена")
+    except Exception as e:
+        error_msg = f"❌ Ошибка отправки задачи: {e}"
+        logger.error(f"Ошибка в add_urgent_command: {e}", exc_info=True)
+        await update.message.reply_text(error_msg)
 
 
 async def force_morning_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -114,14 +125,22 @@ async def force_morning_command(update: Update, context: ContextTypes.DEFAULT_TY
         )
         return
     
-    # Создаем объект приложения для функции
-    class AppWrapper:
-        def __init__(self, bot):
-            self.bot = bot
-    
-    app_wrapper = AppWrapper(context.bot)
-    await send_morning_tasks(app_wrapper)
-    await update.message.reply_text("✅ Задачи отправлены в группу!")
+    try:
+        logger.info("Команда /force_morning выполнена")
+        
+        # Создаем объект приложения для функции
+        class AppWrapper:
+            def __init__(self, bot):
+                self.bot = bot
+        
+        app_wrapper = AppWrapper(context.bot)
+        await send_morning_tasks(app_wrapper)
+        await update.message.reply_text("✅ Задачи отправлены в группу!")
+        logger.info("Задачи успешно отправлены через /force_morning")
+    except Exception as e:
+        error_msg = f"❌ Ошибка отправки задач: {e}"
+        logger.error(f"Ошибка в force_morning_command: {e}", exc_info=True)
+        await update.message.reply_text(error_msg)
 
 
 def create_task_keyboard(task_text: str, task_id: str) -> InlineKeyboardMarkup:
@@ -211,38 +230,54 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer(f"✅ Статус изменен: {new_status}", show_alert=False)
 
 
-async def send_morning_tasks(app: Application):
+async def send_morning_tasks(app):
     """Отправка задач на день в 08:00"""
-    # Проверяем, что сегодня рабочий день (пн-пт)
-    today = datetime.now(MOSCOW_TZ).weekday()  # 0=понедельник, 4=пятница
-    
-    if today > 4:  # Суббота или воскресенье
-        return
-    
-    # Получаем задачи на сегодня
-    day_tasks = tasks_manager.get_tasks_for_day(today)
-    
-    if not day_tasks:
-        return
-    
-    # Формируем сообщение
-    day_names = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница"]
-    day_name = day_names[today]
-    date_str = datetime.now(MOSCOW_TZ).strftime("%d.%m.%Y")
-    
-    message = f"📋 **ЗАДАЧИ НА {day_name.upper()}** ({date_str})\n\n"
-    
-    # Отправляем каждую задачу отдельным сообщением с кнопками
-    for i, task in enumerate(day_tasks, 1):
-        task_id = f"{today}_{i}"
-        keyboard = create_task_keyboard(task, task_id)
+    try:
+        # Проверяем, что сегодня рабочий день (пн-пт)
+        today = datetime.now(MOSCOW_TZ).weekday()  # 0=понедельник, 4=пятница
         
+        # Получаем задачи на сегодня
+        day_tasks = tasks_manager.get_tasks_for_day(today)
+        
+        if not day_tasks:
+            logger.warning(f"Нет задач для дня {today}")
+            return
+        
+        # Формируем сообщение
+        day_names = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница"]
+        day_name = day_names[today]
+        date_str = datetime.now(MOSCOW_TZ).strftime("%d.%m.%Y")
+        
+        logger.info(f"Отправка задач на {day_name} ({date_str})")
+        
+        # Преобразуем CHAT_ID в int если это строка
+        chat_id = int(CHAT_ID) if isinstance(CHAT_ID, str) else CHAT_ID
+        
+        # Отправляем заголовок
         await app.bot.send_message(
-            chat_id=CHAT_ID,
-            text=f"{i}. {task}",
-            reply_markup=keyboard,
+            chat_id=chat_id,
+            text=f"📋 **ЗАДАЧИ НА {day_name.upper()}** ({date_str})",
             parse_mode='Markdown'
         )
+        
+        # Отправляем каждую задачу отдельным сообщением с кнопками
+        for i, task in enumerate(day_tasks, 1):
+            task_id = f"{today}_{i}"
+            keyboard = create_task_keyboard(task, task_id)
+            
+            try:
+                await app.bot.send_message(
+                    chat_id=chat_id,
+                    text=f"{i}. {task}",
+                    reply_markup=keyboard,
+                    parse_mode='Markdown'
+                )
+                logger.info(f"Задача {i} отправлена: {task}")
+            except Exception as e:
+                logger.error(f"Ошибка отправки задачи {i}: {e}")
+                
+    except Exception as e:
+        logger.error(f"Ошибка в send_morning_tasks: {e}", exc_info=True)
 
 
 async def send_reminders(app: Application):
