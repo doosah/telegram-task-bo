@@ -124,8 +124,7 @@ async def add_urgent_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
             msg = await context.bot.send_message(
                 chat_id=chat_id,
                 text=f"🔥 **ВНЕПЛАНОВАЯ ЗАДАЧА**\n\n{urgent_task}",
-                reply_markup=keyboard,
-                parse_mode='Markdown'
+                reply_markup=keyboard
             )
             logger.info(f"✅ Срочная задача успешно отправлена в чат {chat_id}. Message ID: {msg.message_id}")
         except Exception as send_error:
