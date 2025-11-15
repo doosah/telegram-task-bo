@@ -176,25 +176,36 @@ async def force_morning_command(update: Update, context: ContextTypes.DEFAULT_TY
 
 def create_task_keyboard(task_text: str, task_id: str) -> InlineKeyboardMarkup:
     """Создает кнопки для задачи (АГ и КА)"""
-    # Получаем текущий статус из базы данных
-    status_ag = db.get_task_status(f"{task_id}_AG")
-    status_ka = db.get_task_status(f"{task_id}_KA")
-    
-    # Создаем кнопки
-    buttons = [
-        [
-            InlineKeyboardButton(
-                f"АГ {status_ag}",
-                callback_data=f"task_{task_id}_AG"
-            ),
-            InlineKeyboardButton(
-                f"КА {status_ka}",
-                callback_data=f"task_{task_id}_KA"
-            )
+    try:
+        # Получаем текущий статус из базы данных (если нет - используем ⚪)
+        status_ag = db.get_task_status(f"{task_id}_AG") or "⚪"
+        status_ka = db.get_task_status(f"{task_id}_KA") or "⚪"
+        
+        # Создаем кнопки
+        buttons = [
+            [
+                InlineKeyboardButton(
+                    f"АГ {status_ag}",
+                    callback_data=f"task_{task_id}_AG"
+                ),
+                InlineKeyboardButton(
+                    f"КА {status_ka}",
+                    callback_data=f"task_{task_id}_KA"
+                )
+            ]
         ]
-    ]
-    
-    return InlineKeyboardMarkup(buttons)
+        
+        return InlineKeyboardMarkup(buttons)
+    except Exception as e:
+        # Если ошибка - возвращаем клавиатуру с дефолтными статусами
+        logger.error(f"Ошибка создания клавиатуры: {e}")
+        buttons = [
+            [
+                InlineKeyboardButton("АГ ⚪", callback_data=f"task_{task_id}_AG"),
+                InlineKeyboardButton("КА ⚪", callback_data=f"task_{task_id}_KA")
+            ]
+        ]
+        return InlineKeyboardMarkup(buttons)
 
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -311,38 +322,34 @@ async def send_morning_tasks(app, force_weekend=False):
         
         # Отправляем каждую задачу отдельным сообщением с кнопками
         sent_count = 0
+        logger.info(f"Начинаем отправку {len(day_tasks)} задач...")
+        
         for i, task in enumerate(day_tasks, 1):
             task_id = f"{today}_{i}"
             
-            logger.info(f"Подготовка задачи {i}/{len(day_tasks)}: {task}")
+            logger.info(f"[{i}/{len(day_tasks)}] Подготовка задачи: {task}")
+            
+            # Создаем клавиатуру (с обработкой ошибок внутри функции)
+            keyboard = create_task_keyboard(task, task_id)
+            logger.info(f"[{i}/{len(day_tasks)}] Клавиатура создана")
             
             try:
-                logger.info(f"Создание клавиатуры для задачи {i}...")
-                keyboard = create_task_keyboard(task, task_id)
-                logger.info(f"✅ Клавиатура создана для задачи {i}")
-            except Exception as kb_error:
-                logger.error(f"❌ ОШИБКА создания клавиатуры для задачи {i}: {kb_error}")
-                logger.error(f"   Тип ошибки: {type(kb_error).__name__}")
-                continue  # Пропускаем эту задачу, продолжаем со следующей
-            
-            try:
-                logger.info(f"Отправка задачи {i} в чат {chat_id}...")
-                # Убираем parse_mode='Markdown' чтобы избежать проблем с форматированием
+                logger.info(f"[{i}/{len(day_tasks)}] Отправка в чат {chat_id}...")
                 msg = await app.bot.send_message(
                     chat_id=chat_id,
                     text=f"{i}. {task}",
                     reply_markup=keyboard
                 )
-                logger.info(f"✅ Задача {i}/{len(day_tasks)} отправлена (Message ID: {msg.message_id}): {task}")
+                logger.info(f"✅ [{i}/{len(day_tasks)}] Задача отправлена! Message ID: {msg.message_id}")
                 sent_count += 1
                 
-                # Небольшая задержка между сообщениями (чтобы избежать rate limiting)
-                await asyncio.sleep(0.5)
+                # Небольшая задержка между сообщениями
+                if i < len(day_tasks):  # Не ждем после последней задачи
+                    await asyncio.sleep(0.3)
                 
             except Exception as e:
                 logger.error(f"❌ ОШИБКА отправки задачи {i}: {e}")
-                logger.error(f"   Тип ошибки: {type(e).__name__}")
-                logger.error(f"   Чат ID: {chat_id}, Задача: {task}")
+                logger.error(f"   Тип: {type(e).__name__}, Задача: {task[:50]}...")
                 # Продолжаем отправку остальных задач
                 continue
         
