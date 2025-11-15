@@ -68,9 +68,17 @@ class Database:
                         created_at TEXT NOT NULL,
                         completed_at TEXT,
                         result_text TEXT,
-                        result_photo TEXT
+                        result_photo TEXT,
+                        completed_assignees TEXT
                     )
                 ''')
+                
+                # Добавляем поле completed_assignees, если его еще нет
+                try:
+                    cursor.execute('ALTER TABLE custom_tasks ADD COLUMN completed_assignees TEXT')
+                except sqlite3.OperationalError:
+                    # Поле уже существует, игнорируем ошибку
+                    pass
                 
                 # Таблица для отметок присутствия
                 cursor.execute('''
@@ -287,7 +295,8 @@ class Database:
                             'task_id': row[0], 'title': row[1], 'description': row[2],
                             'deadline': row[3], 'assignee': row[4], 'creator': row[5],
                             'status': row[6], 'created_at': row[7], 'completed_at': row[8],
-                            'result_text': row[9], 'result_photo': row[10]
+                            'result_text': row[9], 'result_photo': row[10],
+                            'completed_assignees': row[11] if len(row) > 11 else ''
                         })
                     return tasks
                 finally:
@@ -310,7 +319,8 @@ class Database:
                             'task_id': row[0], 'title': row[1], 'description': row[2],
                             'deadline': row[3], 'assignee': row[4], 'creator': row[5],
                             'status': row[6], 'created_at': row[7], 'completed_at': row[8],
-                            'result_text': row[9], 'result_photo': row[10]
+                            'result_text': row[9], 'result_photo': row[10],
+                            'completed_assignees': row[11] if len(row) > 11 else ''
                         }
                     return None
                 finally:

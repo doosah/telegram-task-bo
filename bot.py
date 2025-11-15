@@ -1083,10 +1083,6 @@ def main():
                 DEADLINE: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, receive_deadline),
                     CallbackQueryHandler(skip_deadline, pattern="^skip_deadline$")
-                ],
-                PHOTO: [
-                    MessageHandler(filters.PHOTO | filters.VIDEO | filters.Document.ALL, receive_photo),
-                    CallbackQueryHandler(skip_photo, pattern="^skip_photo$")
                 ]
             },
             fallbacks=[

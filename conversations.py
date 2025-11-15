@@ -186,47 +186,21 @@ async def receive_deadline(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         context.user_data['creating_task']['deadline'] = deadline_str
         logger.info(f"Срок выполнения получен: {deadline_str}")
         
-        text = (
-            "📝 **СОЗДАНИЕ НОВОЙ ЗАДАЧИ**\n\n"
-            "Шаг 5/5: Фото или видео (опционально)\n\n"
-            "Отправьте фото или видео для задачи\n"
-            "Или нажмите кнопку для пропуска:"
-        )
-        
-        keyboard = InlineKeyboardMarkup([[
-            InlineKeyboardButton("⏭️ Пропустить фото", callback_data="skip_photo")
-        ]])
-        
-        await update.message.reply_text(text, reply_markup=keyboard, parse_mode='Markdown')
-        return PHOTO
+        # Сразу создаем задачу после получения deadline (без фото)
+        return await finish_create_task(update, context)
     except Exception as e:
         logger.error(f"Ошибка в receive_deadline: {e}", exc_info=True)
         return -1
 
 
 async def skip_deadline(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Пропуск срока выполнения - переход к фото"""
+    """Пропуск срока выполнения - сразу создаем задачу"""
     try:
         context.user_data['creating_task']['deadline'] = ""
         logger.info("Срок выполнения пропущен")
         
-        text = (
-            "📝 **СОЗДАНИЕ НОВОЙ ЗАДАЧИ**\n\n"
-            "Шаг 5/5: Фото или видео (опционально)\n\n"
-            "Отправьте фото или видео для задачи\n"
-            "Или нажмите кнопку для завершения:"
-        )
-        
-        keyboard = InlineKeyboardMarkup([[
-            InlineKeyboardButton("⏭️ Пропустить фото", callback_data="skip_photo")
-        ]])
-        
-        if update.callback_query:
-            await update.callback_query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
-        elif update.message:
-            await update.message.reply_text(text, reply_markup=keyboard, parse_mode='Markdown')
-        
-        return PHOTO
+        # Сразу создаем задачу (без фото)
+        return await finish_create_task(update, context)
     except Exception as e:
         logger.error(f"Ошибка в skip_deadline: {e}", exc_info=True)
         return -1
@@ -324,7 +298,6 @@ async def finish_create_task(update: Update, context: ContextTypes.DEFAULT_TYPE)
         description = task_data.get('description', '')
         deadline = task_data.get('deadline', '')
         assignee = task_data.get('assignee', 'all')
-        photo = task_data.get('photo')
         
         # Получаем создателя
         user = update.effective_user
@@ -336,10 +309,6 @@ async def finish_create_task(update: Update, context: ContextTypes.DEFAULT_TYPE)
         else:
             from database import Database
             db_instance = Database()
-        
-        # Сохраняем фото в description или создаем отдельное поле
-        if photo:
-            description = f"{description}\n\n📎 Фото/видео: {photo}" if description else f"📎 Фото/видео: {photo}"
         
         task_id = db_instance.save_custom_task(title, description, deadline, assignee, creator)
         
@@ -354,10 +323,8 @@ async def finish_create_task(update: Update, context: ContextTypes.DEFAULT_TYPE)
             text = (
                 f"✅ **ЗАДАЧА СОЗДАНА!**\n\n"
                 f"📝 Название: {title}\n"
-                f"📄 Описание: {description if description else 'Нет описания'}\n"
                 f"⏰ Срок: {deadline if deadline else 'Не указан'}\n"
-                f"👤 Исполнитель: {assignee_names.get(assignee, assignee)}\n"
-                f"📎 Фото/видео: {'Да' if photo else 'Нет'}\n\n"
+                f"👤 Исполнитель: {assignee_names.get(assignee, assignee)}\n\n"
                 f"ID задачи: #{task_id}"
             )
             
@@ -382,11 +349,10 @@ async def finish_create_task(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 if chat_id:
                     chat_id = int(chat_id) if isinstance(chat_id, str) else chat_id
                     
-                    # Формируем сообщение для группы
+                    # Формируем сообщение для группы (БЕЗ описания - оно будет показано при взятии в работу)
                     group_text = (
                         f"📋 **НОВАЯ ЗАДАЧА #{task_id}**\n\n"
                         f"📝 **{title}**\n"
-                        f"📄 {description if description else 'Без описания'}\n"
                         f"⏰ Срок: {deadline if deadline else 'Не указан'}\n"
                         f"👤 Исполнитель: {assignee_names.get(assignee, assignee)}\n"
                         f"👨‍💼 Создатель: @{creator}"
@@ -415,25 +381,17 @@ async def finish_create_task(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     
                     work_keyboard = InlineKeyboardMarkup(work_buttons)
                     
-                    # Отправляем в группу
-                    if photo:
-                        # Если есть фото, отправляем с фото
-                        await context.bot.send_photo(
-                            chat_id=chat_id,
-                            photo=photo,
-                            caption=group_text,
-                            reply_markup=work_keyboard,
-                            parse_mode='Markdown'
-                        )
-                    else:
-                        # Если нет фото, отправляем просто текст
+                    # Отправляем в группу (без фото)
+                    try:
                         await context.bot.send_message(
                             chat_id=chat_id,
                             text=group_text,
                             reply_markup=work_keyboard,
                             parse_mode='Markdown'
                         )
-                    logger.info(f"Задача #{task_id} отправлена в группу {chat_id} с кнопками 'Взять в работу'")
+                        logger.info(f"Задача #{task_id} отправлена в группу {chat_id} с кнопками 'Взять в работу'")
+                    except Exception as send_error:
+                        logger.error(f"Ошибка отправки задачи в группу: {send_error}", exc_info=True)
             except Exception as e:
                 logger.error(f"Ошибка отправки задачи в группу: {e}", exc_info=True)
                 # Не прерываем процесс, просто логируем ошибку

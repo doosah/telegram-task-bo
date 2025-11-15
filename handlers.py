@@ -631,11 +631,7 @@ async def handle_assignee_callback(query, data: str, context: ContextTypes.DEFAU
         await query.answer()
         assignee = data.split("_")[1]  # AG, KA, SA, all
         
-        if 'creating_task' in context.user_data:
-            context.user_data['creating_task']['assignee'] = assignee
-            text = f"👤 Исполнитель выбран: {assignee}\n\nЗадача будет создана."
-            await query.edit_message_text(text)
-            # Здесь нужно создать задачу
+        # Это обрабатывается ConversationHandler, не нужно здесь
     
     except Exception as e:
         logger.error(f"Ошибка в handle_assignee_callback: {e}", exc_info=True)
@@ -714,35 +710,30 @@ async def handle_work_task_take(query, data: str, context: ContextTypes.DEFAULT_
             except Exception as e:
                 logger.error(f"Ошибка обновления текста сообщения: {e}", exc_info=True)
         
-        # Уведомляем администратора
+        # Отправляем уведомление в общий чат о взятии в работу
         try:
-            admin_id = context.bot_data.get('admin_id')
-            if not admin_id:
-                admin_username = context.bot_data.get('ADMIN_USERNAME')
-                if not admin_username:
-                    import os
-                    admin_username = os.getenv('ADMIN_USERNAME', '').strip()
-                if admin_username:
-                    admin_id = db.get_user_id_by_username(admin_username)
-                    if admin_id:
-                        context.bot_data['admin_id'] = admin_id
+            chat_id = context.bot_data.get('CHAT_ID')
+            if not chat_id:
+                import os
+                chat_id = os.getenv('CHAT_ID', '').strip()
             
-            if admin_id:
-                admin_text = (
-                    f"📋 **ЗАДАЧА ВЗЯТА В РАБОТУ**\n\n"
-                    f"📝 Задача: {task['title']}\n"
-                    f"👤 Исполнитель: @{username} ({assignee})\n"
-                    f"🆔 ID задачи: #{task_id}\n"
-                    f"🕐 Время: {datetime.now().strftime('%H:%M')}"
-                )
+            if chat_id:
+                chat_id = int(chat_id) if isinstance(chat_id, str) else chat_id
+                assignee_names = {
+                    "AG": "Lysenko Alexander",
+                    "KA": "Ruslan Cherenkov",
+                    "SA": "Test"
+                }
+                assignee_name = assignee_names.get(assignee, assignee)
+                
+                take_text = f"{assignee_name} взял задачу в работу"
                 await context.bot.send_message(
-                    chat_id=admin_id,
-                    text=admin_text,
-                    parse_mode='Markdown'
+                    chat_id=chat_id,
+                    text=take_text
                 )
-                logger.info(f"Уведомление о взятии задачи #{task_id} отправлено администратору {admin_id}")
+                logger.info(f"Уведомление о взятии задачи #{task_id} в работу отправлено в общий чат {chat_id}")
         except Exception as e:
-            logger.error(f"Ошибка отправки уведомления администратору: {e}", exc_info=True)
+            logger.error(f"Ошибка отправки уведомления в общий чат: {e}", exc_info=True)
         
         # Обновляем кнопку в сообщении группы (если это сообщение из группы)
         if query.message and query.message.chat.type in ['group', 'supergroup']:
@@ -836,13 +827,48 @@ async def handle_work_task_done(query, data: str, context: ContextTypes.DEFAULT_
         username = user.username if user.username else f"user_{user.id}"
         user_id = user.id
         
-        # Обновляем статус задачи на "completed"
+        # Обновляем статус задачи - отмечаем этого исполнителя как завершившего
         from datetime import datetime
-        db.update_custom_task(
-            task_id,
-            status='completed',
-            completed_at=datetime.now().isoformat()
-        )
+        
+        # Получаем текущую задачу для проверки assignee
+        task_assignee = task.get('assignee', 'all')
+        
+        # Если задача назначена конкретному исполнителю - сразу завершаем
+        # Если задача назначена "всем" - проверяем, все ли завершили
+        if task_assignee == 'all':
+            # Получаем список завершенных исполнителей из БД
+            completed_assignees = task.get('completed_assignees', '') or ''
+            completed_list = completed_assignees.split(',') if completed_assignees else []
+            
+            # Добавляем текущего исполнителя в список завершенных
+            if assignee not in completed_list:
+                completed_list.append(assignee)
+            
+            # Обновляем задачу с новым списком завершенных
+            completed_str = ','.join(completed_list)
+            db.update_custom_task(
+                task_id,
+                completed_assignees=completed_str
+            )
+            
+            # Проверяем, все ли исполнители завершили (AG, KA, SA)
+            all_assignees = ['AG', 'KA', 'SA']
+            all_completed = all(assignee_code in completed_list for assignee_code in all_assignees)
+            
+            if all_completed:
+                # Все завершили - задача полностью завершена
+                db.update_custom_task(
+                    task_id,
+                    status='completed',
+                    completed_at=datetime.now().isoformat()
+                )
+        else:
+            # Конкретный исполнитель - сразу завершаем
+            db.update_custom_task(
+                task_id,
+                status='completed',
+                completed_at=datetime.now().isoformat()
+            )
         
         # Отправляем уведомление в общий чат
         try:
@@ -860,13 +886,44 @@ async def handle_work_task_done(query, data: str, context: ContextTypes.DEFAULT_
                 }
                 assignee_name = assignee_names.get(assignee, assignee)
                 
-                completion_text = (
-                    f"✅ **ЗАДАЧА ЗАВЕРШЕНА**\n\n"
-                    f"📝 Задача: {task['title']}\n"
-                    f"👤 Исполнитель: {assignee_name}\n"
-                    f"🆔 ID задачи: #{task_id}\n"
-                    f"🕐 Время: {datetime.now().strftime('%H:%M')}"
-                )
+                # Проверяем, полностью ли завершена задача
+                task_assignee = task.get('assignee', 'all')
+                if task_assignee == 'all':
+                    # Получаем обновленную задачу
+                    updated_task = db.get_custom_task(task_id)
+                    completed_assignees = updated_task.get('completed_assignees', '') or ''
+                    completed_list = completed_assignees.split(',') if completed_assignees else []
+                    all_assignees = ['AG', 'KA', 'SA']
+                    all_completed = all(assignee_code in completed_list for assignee_code in all_assignees)
+                    
+                    if all_completed:
+                        completion_text = (
+                            f"✅ **ЗАДАЧА ПОЛНОСТЬЮ ЗАВЕРШЕНА**\n\n"
+                            f"📝 Задача: {task['title']}\n"
+                            f"👤 Все исполнители завершили работу\n"
+                            f"🆔 ID задачи: #{task_id}\n"
+                            f"🕐 Время: {datetime.now().strftime('%H:%M')}"
+                        )
+                    else:
+                        # Еще не все завершили
+                        remaining = [a for a in all_assignees if a not in completed_list]
+                        remaining_names = [assignee_names.get(a, a) for a in remaining]
+                        completion_text = (
+                            f"✅ **ЧАСТИЧНО ЗАВЕРШЕНО**\n\n"
+                            f"📝 Задача: {task['title']}\n"
+                            f"👤 {assignee_name} завершил свою часть\n"
+                            f"⏳ Ожидаются: {', '.join(remaining_names)}\n"
+                            f"🆔 ID задачи: #{task_id}\n"
+                            f"🕐 Время: {datetime.now().strftime('%H:%M')}"
+                        )
+                else:
+                    completion_text = (
+                        f"✅ **ЗАДАЧА ЗАВЕРШЕНА**\n\n"
+                        f"📝 Задача: {task['title']}\n"
+                        f"👤 Исполнитель: {assignee_name}\n"
+                        f"🆔 ID задачи: #{task_id}\n"
+                        f"🕐 Время: {datetime.now().strftime('%H:%M')}"
+                    )
                 await context.bot.send_message(
                     chat_id=chat_id,
                     text=completion_text,
@@ -876,35 +933,8 @@ async def handle_work_task_done(query, data: str, context: ContextTypes.DEFAULT_
         except Exception as e:
             logger.error(f"Ошибка отправки уведомления в общий чат: {e}", exc_info=True)
         
-        # Уведомляем администратора
-        try:
-            admin_id = context.bot_data.get('admin_id')
-            if not admin_id:
-                admin_username = context.bot_data.get('ADMIN_USERNAME')
-                if not admin_username:
-                    import os
-                    admin_username = os.getenv('ADMIN_USERNAME', '').strip()
-                if admin_username:
-                    admin_id = db.get_user_id_by_username(admin_username)
-                    if admin_id:
-                        context.bot_data['admin_id'] = admin_id
-            
-            if admin_id:
-                admin_text = (
-                    f"✅ **ЗАДАЧА ЗАВЕРШЕНА**\n\n"
-                    f"📝 Задача: {task['title']}\n"
-                    f"👤 Исполнитель: @{username} ({assignee})\n"
-                    f"🆔 ID задачи: #{task_id}\n"
-                    f"🕐 Время: {datetime.now().strftime('%H:%M')}"
-                )
-                await context.bot.send_message(
-                    chat_id=admin_id,
-                    text=admin_text,
-                    parse_mode='Markdown'
-                )
-                logger.info(f"Уведомление о завершении задачи #{task_id} отправлено администратору {admin_id}")
-        except Exception as e:
-            logger.error(f"Ошибка отправки уведомления администратору: {e}", exc_info=True)
+        # Уведомление администратору отправляется только при полном завершении
+        # (уже отправлено выше в общий чат)
         
         # Обновляем кнопку в сообщении группы (если это сообщение из группы)
         if query.message and query.message.chat.type in ['group', 'supergroup']:
