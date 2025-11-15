@@ -849,29 +849,35 @@ async def send_evening_summary(app: Application):
         for i, task in enumerate(day_tasks, 1):
             task_id = f"{today}_{i}"
             try:
-                status_ga = db.get_task_status(f"{task_id}_GA")
-                status_k = db.get_task_status(f"{task_id}_К")
-                status_s = db.get_task_status(f"{task_id}_С")
+                status_ag = db.get_task_status(f"{task_id}_AG")
+                status_ka = db.get_task_status(f"{task_id}_KA")
+                status_sa = db.get_task_status(f"{task_id}_SA")
             except Exception as e:
                 logger.error(f"Ошибка получения статусов для задачи {task_id}: {e}", exc_info=True)
                 # Используем дефолтные статусы
-                status_ga = "⚪"
-                status_k = "⚪"
-                status_s = "⚪"
+                status_ag = "⚪"
+                status_ka = "⚪"
+                status_sa = "⚪"
             
             # Задача невыполнена, если хотя бы один не выполнил
-            if status_ga != "✅" or status_k != "✅" or status_s != "✅":
+            if status_ag != "✅" or status_ka != "✅" or status_sa != "✅":
                 users_needed = []
-                if status_ga != "✅":
-                    users_needed.append("@alex301182")
-                if status_k != "✅":
-                    users_needed.append("@Korudirp")
-                if status_s != "✅":
-                    users_needed.append("@sanya_hui_sosi1488")
+                if status_ag != "✅":
+                    users_needed.append("Lysenko Alexander")
+                if status_ka != "✅":
+                    users_needed.append("Ruslan Cherenkov")
+                if status_sa != "✅":
+                    users_needed.append("Test")
+                
+                # Формируем список исполнителей
+                if len(users_needed) == 1:
+                    users_str = users_needed[0]
+                else:
+                    users_str = ", ".join(users_needed)
                 
                 incomplete.append({
                     "task": task,
-                    "users": " ".join(users_needed)
+                    "users": users_str
                 })
     except Exception as e:
         logger.error(f"❌ Ошибка обработки задач для итогов дня: {e}", exc_info=True)
