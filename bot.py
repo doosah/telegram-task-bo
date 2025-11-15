@@ -110,9 +110,14 @@ async def add_urgent_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         logger.info(f"Отправка срочной задачи в чат {chat_id}: {urgent_task}")
         
         # Отправляем задачу в группу
-        keyboard = create_task_keyboard(urgent_task, "urgent")
-        
-        logger.info(f"Создание клавиатуры для задачи: {urgent_task}")
+        logger.info("Создание клавиатуры для задачи...")
+        try:
+            keyboard = create_task_keyboard(urgent_task, "urgent")
+            logger.info(f"✅ Клавиатура создана успешно для задачи: {urgent_task}")
+        except Exception as kb_error:
+            logger.error(f"❌ ОШИБКА создания клавиатуры: {kb_error}")
+            logger.error(f"   Тип ошибки: {type(kb_error).__name__}")
+            raise
         
         try:
             msg = await context.bot.send_message(
@@ -158,7 +163,8 @@ async def force_morning_command(update: Update, context: ContextTypes.DEFAULT_TY
                 self.bot = bot
         
         app_wrapper = AppWrapper(context.bot)
-        await send_morning_tasks(app_wrapper)
+        # force_weekend=True позволяет отправлять задачи даже в выходные
+        await send_morning_tasks(app_wrapper, force_weekend=True)
         await update.message.reply_text("✅ Задачи отправлены в группу!")
         logger.info("Задачи успешно отправлены через /force_morning")
     except Exception as e:
