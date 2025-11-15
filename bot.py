@@ -714,9 +714,9 @@ def main():
         
         # Регистрируем ConversationHandler для создания задач
         from conversations import (
-            TITLE, DESCRIPTION, DEADLINE, ASSIGNEE,
-            start_create_task, receive_title, receive_description, receive_deadline, receive_assignee,
-            skip_description, skip_deadline, cancel_create_task,
+            TITLE, DESCRIPTION, ASSIGNEE, DEADLINE, PHOTO,
+            start_create_task, receive_title, receive_description, receive_assignee, receive_deadline, receive_photo,
+            skip_description, skip_deadline, skip_photo, cancel_create_task,
             EDIT_TITLE, EDIT_DESCRIPTION, EDIT_DEADLINE, EDIT_ASSIGNEE,
             start_edit_task, receive_edit_title, receive_edit_description, receive_edit_deadline, receive_edit_assignee,
             skip_edit_title, skip_edit_description, skip_edit_deadline, cancel_edit_task,
@@ -735,15 +735,19 @@ def main():
                     MessageHandler(filters.TEXT & ~filters.COMMAND, receive_description),
                     CallbackQueryHandler(skip_description, pattern="^skip_description$")
                 ],
-                DEADLINE: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, receive_deadline),
-                    CallbackQueryHandler(skip_deadline, pattern="^skip_deadline$")
-                ],
                 ASSIGNEE: [
                     CallbackQueryHandler(
                         receive_assignee,
                         pattern="^assignee_"
                     )
+                ],
+                DEADLINE: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, receive_deadline),
+                    CallbackQueryHandler(skip_deadline, pattern="^skip_deadline$")
+                ],
+                PHOTO: [
+                    MessageHandler(filters.PHOTO | filters.VIDEO | filters.Document.ALL, receive_photo),
+                    CallbackQueryHandler(skip_photo, pattern="^skip_photo$")
                 ]
             },
             fallbacks=[

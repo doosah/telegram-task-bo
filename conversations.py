@@ -11,9 +11,9 @@ from menu import get_assignee_menu, get_main_menu
 logger = logging.getLogger(__name__)
 
 # Состояния для ConversationHandler
-(TITLE, DESCRIPTION, DEADLINE, ASSIGNEE) = range(4)
-(EDIT_TITLE, EDIT_DESCRIPTION, EDIT_DEADLINE, EDIT_ASSIGNEE) = range(4, 8)
-(COMPLETE_RESULT, COMPLETE_PHOTO) = range(8, 10)
+(TITLE, DESCRIPTION, ASSIGNEE, DEADLINE, PHOTO) = range(5)
+(EDIT_TITLE, EDIT_DESCRIPTION, EDIT_DEADLINE, EDIT_ASSIGNEE) = range(5, 9)
+(COMPLETE_RESULT, COMPLETE_PHOTO) = range(9, 11)
 
 
 async def start_create_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -63,12 +63,12 @@ async def receive_title(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         
         text = (
             "📝 **СОЗДАНИЕ НОВОЙ ЗАДАЧИ**\n\n"
-            "Шаг 2/4: Описание задачи\n\n"
-            "Введите описание задачи (или отправьте /skip для пропуска):"
+            "Шаг 2/5: Описание задачи\n\n"
+            "Введите описание задачи (или нажмите кнопку для пропуска):"
         )
         
         keyboard = InlineKeyboardMarkup([[
-            InlineKeyboardButton("⏭️ Пропустить", callback_data="skip_description")
+            InlineKeyboardButton("⏭️ Пропустить описание", callback_data="skip_description")
         ]])
         
         await update.message.reply_text(text, reply_markup=keyboard, parse_mode='Markdown')
@@ -116,62 +116,7 @@ async def skip_description(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         
         text = (
             "📝 **СОЗДАНИЕ НОВОЙ ЗАДАЧИ**\n\n"
-            "Шаг 3/4: Срок выполнения\n\n"
-            "Введите срок выполнения в формате ДД.ММ.ГГГГ (например, 25.12.2024)\n"
-            "Или отправьте /skip для пропуска:"
-        )
-        
-        keyboard = InlineKeyboardMarkup([[
-            InlineKeyboardButton("⏭️ Пропустить", callback_data="skip_deadline")
-        ]])
-        
-        if update.callback_query:
-            await update.callback_query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
-        elif update.message:
-            await update.message.reply_text(text, reply_markup=keyboard, parse_mode='Markdown')
-        
-        return DEADLINE
-    except Exception as e:
-        logger.error(f"Ошибка в skip_description: {e}", exc_info=True)
-        return -1
-
-
-async def receive_deadline(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Получение срока выполнения"""
-    try:
-        deadline_str = update.message.text.strip()
-        
-        # Парсим дату в формате ДД.ММ.ГГГГ
-        try:
-            deadline = datetime.strptime(deadline_str, "%d.%m.%Y")
-            context.user_data['creating_task']['deadline'] = deadline_str
-            logger.info(f"Срок выполнения получен: {deadline_str}")
-        except ValueError:
-            await update.message.reply_text("❌ Неверный формат даты. Используйте ДД.ММ.ГГГГ (например, 25.12.2024):")
-            return DEADLINE
-        
-        text = (
-            "📝 **СОЗДАНИЕ НОВОЙ ЗАДАЧИ**\n\n"
-            "Шаг 4/4: Выбор исполнителя\n\n"
-            "Выберите исполнителя задачи:"
-        )
-        
-        await update.message.reply_text(text, reply_markup=get_assignee_menu(), parse_mode='Markdown')
-        return ASSIGNEE
-    except Exception as e:
-        logger.error(f"Ошибка в receive_deadline: {e}", exc_info=True)
-        return -1
-
-
-async def skip_deadline(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Пропуск срока выполнения"""
-    try:
-        context.user_data['creating_task']['deadline'] = ""
-        logger.info("Срок выполнения пропущен")
-        
-        text = (
-            "📝 **СОЗДАНИЕ НОВОЙ ЗАДАЧИ**\n\n"
-            "Шаг 4/4: Выбор исполнителя\n\n"
+            "Шаг 3/5: Выбор исполнителя\n\n"
             "Выберите исполнителя задачи:"
         )
         
@@ -182,12 +127,75 @@ async def skip_deadline(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         
         return ASSIGNEE
     except Exception as e:
+        logger.error(f"Ошибка в skip_description: {e}", exc_info=True)
+        return -1
+
+
+async def receive_deadline(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Получение срока выполнения - переход к фото"""
+    try:
+        deadline_str = update.message.text.strip()
+        
+        # Парсим дату в формате ДД.ММ.ГГГГ или ДД.ММ.ГГГГ ЧЧ:ММ
+        try:
+            if " " in deadline_str:
+                deadline = datetime.strptime(deadline_str, "%d.%m.%Y %H:%M")
+            else:
+                deadline = datetime.strptime(deadline_str, "%d.%m.%Y")
+            context.user_data['creating_task']['deadline'] = deadline_str
+            logger.info(f"Срок выполнения получен: {deadline_str}")
+        except ValueError:
+            await update.message.reply_text("❌ Неверный формат. Используйте ДД.ММ.ГГГГ ЧЧ:ММ или ДД.ММ.ГГГГ (например, 25.12.2024 14:30):")
+            return DEADLINE
+        
+        text = (
+            "📝 **СОЗДАНИЕ НОВОЙ ЗАДАЧИ**\n\n"
+            "Шаг 5/5: Фото или видео (опционально)\n\n"
+            "Отправьте фото или видео для задачи\n"
+            "Или нажмите кнопку для пропуска:"
+        )
+        
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("⏭️ Пропустить фото", callback_data="skip_photo")
+        ]])
+        
+        await update.message.reply_text(text, reply_markup=keyboard, parse_mode='Markdown')
+        return PHOTO
+    except Exception as e:
+        logger.error(f"Ошибка в receive_deadline: {e}", exc_info=True)
+        return -1
+
+
+async def skip_deadline(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Пропуск срока выполнения - переход к фото"""
+    try:
+        context.user_data['creating_task']['deadline'] = ""
+        logger.info("Срок выполнения пропущен")
+        
+        text = (
+            "📝 **СОЗДАНИЕ НОВОЙ ЗАДАЧИ**\n\n"
+            "Шаг 5/5: Фото или видео (опционально)\n\n"
+            "Отправьте фото или видео для задачи\n"
+            "Или нажмите кнопку для завершения:"
+        )
+        
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("⏭️ Пропустить фото", callback_data="skip_photo")
+        ]])
+        
+        if update.callback_query:
+            await update.callback_query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
+        elif update.message:
+            await update.message.reply_text(text, reply_markup=keyboard, parse_mode='Markdown')
+        
+        return PHOTO
+    except Exception as e:
         logger.error(f"Ошибка в skip_deadline: {e}", exc_info=True)
         return -1
 
 
 async def receive_assignee(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Получение исполнителя и завершение создания задачи"""
+    """Получение исполнителя - переход к дате"""
     try:
         assignee = update.callback_query.data.split("_")[1] if update.callback_query else "all"
         
@@ -196,26 +204,94 @@ async def receive_assignee(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             return ASSIGNEE
         
         context.user_data['creating_task']['assignee'] = assignee
+        await update.callback_query.answer("✅ Исполнитель выбран")
         
+        text = (
+            "📝 **СОЗДАНИЕ НОВОЙ ЗАДАЧИ**\n\n"
+            "Шаг 4/5: Дата и время выполнения\n\n"
+            "Введите дату и время в формате:\n"
+            "ДД.ММ.ГГГГ ЧЧ:ММ (например, 25.12.2024 14:30)\n"
+            "Или только дату: ДД.ММ.ГГГГ\n\n"
+            "Нажмите кнопку для пропуска:"
+        )
+        
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("⏭️ Пропустить дату", callback_data="skip_deadline")
+        ]])
+        
+        await update.callback_query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
+        return DEADLINE
+            
+    except Exception as e:
+        logger.error(f"Ошибка в receive_assignee: {e}", exc_info=True)
+        if update.callback_query:
+            await update.callback_query.answer("❌ Произошла ошибка", show_alert=True)
+        return -1
+
+
+async def receive_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Получение фото/видео и завершение создания задачи"""
+    try:
+        photo_file_id = None
+        if update.message.photo:
+            photo_file_id = update.message.photo[-1].file_id
+        elif update.message.video:
+            photo_file_id = update.message.video.file_id
+        elif update.message.document:
+            photo_file_id = update.message.document.file_id
+        
+        if photo_file_id:
+            context.user_data['creating_task']['photo'] = photo_file_id
+            logger.info(f"Фото/видео получено: {photo_file_id}")
+        
+        # Завершаем создание задачи
+        return await finish_create_task(update, context)
+        
+    except Exception as e:
+        logger.error(f"Ошибка в receive_photo: {e}", exc_info=True)
+        return -1
+
+
+async def skip_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Пропуск фото и завершение создания задачи"""
+    try:
+        context.user_data['creating_task']['photo'] = None
+        logger.info("Фото пропущено")
+        
+        # Завершаем создание задачи
+        return await finish_create_task(update, context)
+        
+    except Exception as e:
+        logger.error(f"Ошибка в skip_photo: {e}", exc_info=True)
+        return -1
+
+
+async def finish_create_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Завершение создания задачи - сохранение в БД"""
+    try:
         # Получаем данные задачи
         task_data = context.user_data.get('creating_task', {})
         title = task_data.get('title', '')
         description = task_data.get('description', '')
         deadline = task_data.get('deadline', '')
         assignee = task_data.get('assignee', 'all')
+        photo = task_data.get('photo')
         
         # Получаем создателя
         user = update.effective_user
         creator = user.username if user.username else f"user_{user.id}"
         
         # Сохраняем задачу в БД
-        # Используем глобальный экземпляр db, переданный через context
-        # Если db не передан, создаем новый экземпляр (fallback)
         if 'db' in context.bot_data:
             db_instance = context.bot_data['db']
         else:
             from database import Database
             db_instance = Database()
+        
+        # Сохраняем фото в description или создаем отдельное поле
+        if photo:
+            description = f"{description}\n\n📎 Фото/видео: {photo}" if description else f"📎 Фото/видео: {photo}"
+        
         task_id = db_instance.save_custom_task(title, description, deadline, assignee, creator)
         
         if task_id:
@@ -231,7 +307,8 @@ async def receive_assignee(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                 f"📝 Название: {title}\n"
                 f"📄 Описание: {description if description else 'Нет описания'}\n"
                 f"⏰ Срок: {deadline if deadline else 'Не указан'}\n"
-                f"👤 Исполнитель: {assignee_names.get(assignee, assignee)}\n\n"
+                f"👤 Исполнитель: {assignee_names.get(assignee, assignee)}\n"
+                f"📎 Фото/видео: {'Да' if photo else 'Нет'}\n\n"
                 f"ID задачи: #{task_id}"
             )
             
@@ -239,8 +316,11 @@ async def receive_assignee(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                 InlineKeyboardButton("🔙 В главное меню", callback_data="menu_main")
             ]])
             
-            await update.callback_query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
-            await update.callback_query.answer("✅ Задача успешно создана!")
+            if update.callback_query:
+                await update.callback_query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
+                await update.callback_query.answer("✅ Задача успешно создана!")
+            elif update.message:
+                await update.message.reply_text(text, reply_markup=keyboard, parse_mode='Markdown')
             
             # Очищаем данные
             context.user_data.pop('creating_task', None)
@@ -248,11 +328,15 @@ async def receive_assignee(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             logger.info(f"Задача #{task_id} создана пользователем @{creator}")
             return -1  # Завершаем диалог
         else:
-            await update.callback_query.answer("❌ Ошибка создания задачи", show_alert=True)
-            return ASSIGNEE
+            error_text = "❌ Ошибка создания задачи"
+            if update.callback_query:
+                await update.callback_query.answer(error_text, show_alert=True)
+            elif update.message:
+                await update.message.reply_text(error_text)
+            return -1
             
     except Exception as e:
-        logger.error(f"Ошибка в receive_assignee: {e}", exc_info=True)
+        logger.error(f"Ошибка в finish_create_task: {e}", exc_info=True)
         if update.callback_query:
             await update.callback_query.answer("❌ Произошла ошибка", show_alert=True)
         return -1

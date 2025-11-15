@@ -37,10 +37,6 @@ def get_testing_menu() -> InlineKeyboardMarkup:
             InlineKeyboardButton("📋 Ежедневные задачи", callback_data="test_daily_tasks")
         ],
         [
-            InlineKeyboardButton("✅ Прибытие", callback_data="test_presence_here"),
-            InlineKeyboardButton("⏰ Задержка", callback_data="test_presence_late")
-        ],
-        [
             InlineKeyboardButton("👥 Контроль сотрудников", callback_data="test_employees")
         ],
         [

@@ -33,8 +33,9 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
         
         elif data == "menu_create_task":
             # ConversationHandler обработает это через entry_points
-            # Просто подтверждаем нажатие
-            await query.answer("Начинаем создание задачи...")
+            # НЕ обрабатываем здесь, чтобы ConversationHandler мог перехватить
+            # Просто не делаем ничего - ConversationHandler сам обработает
+            pass
         
         elif data == "menu_view_tasks":
             from menu import get_tasks_menu, get_main_menu
@@ -118,8 +119,8 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
             ]])
             await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
         
-        elif data == "test_presence_here" or data == "test_presence_late":
-            # Тестовая отправка кнопок присутствия
+        elif data == "test_employees":
+            # Контроль сотрудников - отправка кнопок присутствия (как в 07:50)
             if 'send_presence_buttons' in context.bot_data:
                 send_presence_buttons = context.bot_data['send_presence_buttons']
                 class AppWrapper:
@@ -129,34 +130,13 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
                 try:
                     await send_presence_buttons(app_wrapper)
                     await query.answer("✅ Кнопки присутствия отправлены в группу!")
-                    text = "✅ **КНОПКИ ПРИСУТСТВИЯ**\n\nКнопки успешно отправлены в группу!"
+                    text = "✅ **КОНТРОЛЬ СОТРУДНИКОВ**\n\nКнопки 'На рабочем месте' и 'Опаздываю' отправлены в группу!"
                 except Exception as e:
                     logger.error(f"Ошибка отправки кнопок присутствия: {e}", exc_info=True)
                     await query.answer("❌ Ошибка отправки кнопок", show_alert=True)
                     text = f"❌ **ОШИБКА**\n\nНе удалось отправить кнопки: {e}"
             else:
-                text = "✅ **КНОПКИ ПРИСУТСТВИЯ**\n\nКнопки будут отправлены автоматически в 07:50."
-            
-            keyboard = InlineKeyboardMarkup([[
-                InlineKeyboardButton("🔙 К тестированию", callback_data="menu_testing")
-            ]])
-            await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
-        
-        elif data == "test_employees":
-            # Контроль сотрудников - показываем список пользователей и их статусы
-            user_mapping = {
-                "alex301182": {"initials": "AG", "name": "АГ"},
-                "Korudirp": {"initials": "KA", "name": "КА"},
-                "sanya_hui_sosi1488": {"initials": "SA", "name": "СА"}
-            }
-            
-            text = "👥 **КОНТРОЛЬ СОТРУДНИКОВ**\n\n"
-            for username, info in user_mapping.items():
-                user_id = db.get_user_id_by_username(username)
-                status = "✅ Зарегистрирован" if user_id else "⚪ Не зарегистрирован"
-                text += f"**{info['name']}** (@{username})\n"
-                text += f"ID: {user_id if user_id else 'Не установлен'}\n"
-                text += f"Статус: {status}\n\n"
+                text = "✅ **КОНТРОЛЬ СОТРУДНИКОВ**\n\nКнопки будут отправлены автоматически в 07:50."
             
             keyboard = InlineKeyboardMarkup([[
                 InlineKeyboardButton("🔙 К тестированию", callback_data="menu_testing")
