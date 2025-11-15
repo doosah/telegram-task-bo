@@ -89,10 +89,14 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def add_urgent_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /add_urgent - добавить внеплановую задачу"""
-    user = update.effective_user
-    
-    # Проверяем, что команду запускает админ
-    if user.username != ADMIN_USERNAME:
+    try:
+        user = update.effective_user
+        if not user:
+            logger.error("user is None in add_urgent_command")
+            return
+        
+        # Проверяем, что команду запускает админ
+        if user.username != ADMIN_USERNAME:
         await update.message.reply_text(
             "❌ У вас нет прав для использования этой команды."
         )
@@ -118,8 +122,10 @@ async def add_urgent_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         # Отправляем задачу в группу
         logger.info("Создание клавиатуры для задачи...")
         try:
-            keyboard = create_task_keyboard(urgent_task, "urgent")
-            logger.info(f"✅ Клавиатура создана успешно для задачи: {urgent_task}")
+            # Используем уникальный ID для срочных задач, чтобы избежать конфликтов
+            urgent_task_id = f"urgent_{int(time_module.time())}"
+            keyboard = create_task_keyboard(urgent_task, urgent_task_id)
+            logger.info(f"✅ Клавиатура создана успешно для задачи: {urgent_task} (ID: {urgent_task_id})")
         except Exception as kb_error:
             logger.error(f"❌ ОШИБКА создания клавиатуры: {kb_error}")
             logger.error(f"   Тип ошибки: {type(kb_error).__name__}")
@@ -555,6 +561,9 @@ async def send_morning_tasks(app, force_weekend=False):
         # Создаем кнопки для всех задач (ОДНА кнопка на задачу)
         all_buttons = []
         
+        # Проверяем, что сообщение не превысит лимит
+        estimated_length = len(message_text)
+        
         for i, task in enumerate(day_tasks, 1):
             task_id = f"{today}_{i}"
             task_line = f"{i}. {task}\n"
@@ -591,18 +600,29 @@ async def send_morning_tasks(app, force_weekend=False):
                 )
             ])
         
+        # Проверяем, что есть хотя бы одна задача
+        if not all_buttons:
+            logger.error("❌ Нет задач для отправки (все были отфильтрованы)")
+            return
+        
         # Создаем клавиатуру со всеми кнопками
         keyboard = InlineKeyboardMarkup(all_buttons)
         
+        # Валидация: Telegram ограничивает количество кнопок (до 100)
+        if len(all_buttons) > 100:
+            logger.warning(f"⚠️ Слишком много кнопок ({len(all_buttons)}), ограничиваем до 100")
+            all_buttons = all_buttons[:100]
+            keyboard = InlineKeyboardMarkup(all_buttons)
+        
         # Отправляем одно сообщение со всеми задачами
         try:
-            logger.info(f"Отправка сообщения с {len(day_tasks)} задачами в чат {chat_id}...")
+            logger.info(f"Отправка сообщения с {len(all_buttons)} задачами в чат {chat_id}...")
             msg = await app.bot.send_message(
                 chat_id=chat_id,
                 text=message_text,
                 reply_markup=keyboard
             )
-            logger.info(f"✅ Все {len(day_tasks)} задач отправлены одним сообщением! Message ID: {msg.message_id}")
+            logger.info(f"✅ Все {len(all_buttons)} задач отправлены одним сообщением! Message ID: {msg.message_id}")
         except Exception as e:
             logger.error(f"❌ ОШИБКА отправки сообщения: {type(e).__name__}: {e}")
             raise
