@@ -210,7 +210,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(parts) != 3:
         return
     
-    task_id = parts[1]  # Например "0_1" или "urgent"
+    task_id = parts[1]
     user_initials = parts[2]  # AG или KA
     
     # Получаем пользователя
@@ -231,12 +231,23 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     expected_username = user_mapping[user_initials]["username"]
     
     # Проверяем, что правильный пользователь нажал кнопку
-    if username != expected_username:
+    # Если у пользователя нет username, проверяем по ID из базы данных
+    if username and username != expected_username:
         await query.answer(
             f"❌ Эта кнопка для @{expected_username}",
             show_alert=True
         )
         return
+    
+    # Если username не указан, проверяем по ID из базы
+    if not username:
+        saved_user_id = db.get_user_id_by_username(expected_username)
+        if saved_user_id and user_id != saved_user_id:
+            await query.answer(
+                f"❌ Эта кнопка для @{expected_username}",
+                show_alert=True
+            )
+            return
     
     # Сохраняем ID пользователя в базу данных (для отправки напоминаний)
     db.save_user_id(username, user_id, user_initials)
@@ -251,46 +262,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Сохраняем в базу данных
     db.set_task_status(status_key, new_status)
     
-    # Обновляем ВСЕ кнопки в сообщении с актуальными статусами из БД
-    # Извлекаем все task_id из текущей клавиатуры
-    current_keyboard = query.message.reply_markup
-    if not current_keyboard or not current_keyboard.inline_keyboard:
-        return
+    # Обновляем сообщение
+    keyboard = create_task_keyboard("", task_id)
     
-    # Создаем новую клавиатуру с актуальными статусами
-    new_buttons = []
-    for row in current_keyboard.inline_keyboard:
-        new_row = []
-        for button in row:
-            # Парсим callback_data кнопки
-            btn_data = button.callback_data
-            if btn_data and btn_data.startswith("task_"):
-                btn_parts = btn_data.split("_")
-                if len(btn_parts) == 3:
-                    btn_task_id = btn_parts[1]
-                    btn_user_initials = btn_parts[2]
-                    
-                    # Получаем актуальный статус из БД
-                    btn_status_key = f"{btn_task_id}_{btn_user_initials}"
-                    btn_status = db.get_task_status(btn_status_key) or "⚪"
-                    
-                    # Определяем текст кнопки
-                    if btn_user_initials == "AG":
-                        btn_text = f"АГ {btn_status}"
-                    elif btn_user_initials == "KA":
-                        btn_text = f"КА {btn_status}"
-                    else:
-                        btn_text = button.text
-                    
-                    new_row.append(InlineKeyboardButton(btn_text, callback_data=btn_data))
-                else:
-                    new_row.append(button)
-            else:
-                new_row.append(button)
-        if new_row:
-            new_buttons.append(new_row)
-    
-    keyboard = InlineKeyboardMarkup(new_buttons)
     await query.edit_message_reply_markup(reply_markup=keyboard)
     
     # Отправляем подтверждение
@@ -332,29 +306,48 @@ async def send_morning_tasks(app, force_weekend=False):
         
         logger.info(f"Попытка отправить {len(day_tasks)} задач в чат {chat_id}")
         
-        # Отправляем все задачи одним сообщением с кнопками под каждой задачей
+        # Отправляем заголовок
+        try:
+            header_msg = await app.bot.send_message(
+                chat_id=chat_id,
+                text=f"📋 **ЗАДАЧИ НА {day_name.upper()}** ({date_str})",
+                parse_mode='Markdown'
+            )
+            logger.info(f"✅ Заголовок отправлен успешно. Message ID: {header_msg.message_id}")
+        except Exception as e:
+            logger.error(f"❌ ОШИБКА отправки заголовка в чат {chat_id}: {e}")
+            logger.error(f"   Тип ошибки: {type(e).__name__}")
+            raise
+        
+        # Формируем одно сообщение со всеми задачами
         logger.info(f"Формирование сообщения с {len(day_tasks)} задачами...")
         
-        # Формируем текст сообщения со всеми задачами
-        message_text = f"📋 ЗАДАЧИ НА {day_name.upper()} ({date_str})\n\n"
+        # Создаем текст сообщения со всеми задачами
+        message_text = f"📋 **ЗАДАЧИ НА {day_name.upper()}** ({date_str})\n\n"
         
         # Создаем кнопки для всех задач
         all_buttons = []
         
         for i, task in enumerate(day_tasks, 1):
             task_id = f"{today}_{i}"
-            message_text += f"{i}. {task}\n"
+            message_text += f"{i}. {task}\n\n"
             
-            # Создаем кнопки для этой задачи
-            buttons_row = [
-                InlineKeyboardButton("АГ ⚪", callback_data=f"task_{task_id}_AG"),
-                InlineKeyboardButton("КА ⚪", callback_data=f"task_{task_id}_KA")
-            ]
-            all_buttons.append(buttons_row)
+            # Добавляем кнопки для этой задачи
+            all_buttons.append([
+                InlineKeyboardButton(
+                    f"{i}. АГ ⚪",
+                    callback_data=f"task_{task_id}_AG"
+                ),
+                InlineKeyboardButton(
+                    f"{i}. КА ⚪",
+                    callback_data=f"task_{task_id}_KA"
+                )
+            ])
         
         # Создаем клавиатуру со всеми кнопками
         keyboard = InlineKeyboardMarkup(all_buttons)
         
+        # Отправляем одно сообщение со всеми задачами
         try:
             logger.info(f"Отправка сообщения с {len(day_tasks)} задачами в чат {chat_id}...")
             msg = await app.bot.send_message(
