@@ -178,24 +178,9 @@ def create_task_keyboard(task_text: str, task_id: str) -> InlineKeyboardMarkup:
     # Одна кнопка с названием задачи
     # Статус будет обновляться при нажатии
     
-    # Получаем статусы из БД (быстро, без блокировок)
-    status_ag = "⚪"
-    status_ka = "⚪"
-    status_sa = "⚪"
-    try:
-        status_ag = db.get_task_status(f"{task_id}_AG") or "⚪"
-        status_ka = db.get_task_status(f"{task_id}_KA") or "⚪"
-        status_sa = db.get_task_status(f"{task_id}_SA") or "⚪"
-    except:
-        pass
-    
-    # Определяем общий статус задачи (✅ только когда все 3 выполнили)
-    if status_ag == "✅" and status_ka == "✅" and status_sa == "✅":
-        task_status = "✅"
-    elif status_ag != "⚪" or status_ka != "⚪" or status_sa != "⚪":
-        task_status = "⏳"
-    else:
-        task_status = "⚪"
+    # Для новых задач всегда начинаем с ⚪ (не обращаемся к БД, чтобы избежать блокировок)
+    # Реальный статус будет загружен и обновлен при нажатии кнопки
+    task_status = "⚪"
     
     # Создаем одну кнопку с названием задачи и статусом
     button_text = f"{task_text} {task_status}"
