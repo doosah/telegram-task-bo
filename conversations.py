@@ -209,8 +209,13 @@ async def receive_assignee(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         creator = user.username if user.username else f"user_{user.id}"
         
         # Сохраняем задачу в БД
-        from database import Database
-        db_instance = Database()
+        # Используем глобальный экземпляр db, переданный через context
+        # Если db не передан, создаем новый экземпляр (fallback)
+        if 'db' in context.bot_data:
+            db_instance = context.bot_data['db']
+        else:
+            from database import Database
+            db_instance = Database()
         task_id = db_instance.save_custom_task(title, description, deadline, assignee, creator)
         
         if task_id:
@@ -290,8 +295,12 @@ async def start_edit_task(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         context.user_data['editing_task_id'] = task_id
         
         # Получаем задачу из БД
-        from database import Database
-        db = Database()
+        # Используем глобальный экземпляр db из context.bot_data
+        if 'db' in context.bot_data:
+            db = context.bot_data['db']
+        else:
+            from database import Database
+            db = Database()
         task = db.get_custom_task(task_id)
         
         if not task:
@@ -508,8 +517,12 @@ async def receive_edit_assignee(update: Update, context: ContextTypes.DEFAULT_TY
         task_data = context.user_data.get('editing_task', {})
         
         # Обновляем задачу в БД
-        from database import Database
-        db = Database()
+        # Используем глобальный экземпляр db из context.bot_data
+        if 'db' in context.bot_data:
+            db = context.bot_data['db']
+        else:
+            from database import Database
+            db = Database()
         db.update_custom_task(
             task_id,
             title=task_data.get('title'),
@@ -599,8 +612,12 @@ async def start_complete_task(update: Update, context: ContextTypes.DEFAULT_TYPE
         context.user_data['completing_task_id'] = task_id
         
         # Получаем задачу из БД
-        from database import Database
-        db = Database()
+        # Используем глобальный экземпляр db из context.bot_data
+        if 'db' in context.bot_data:
+            db = context.bot_data['db']
+        else:
+            from database import Database
+            db = Database()
         task = db.get_custom_task(task_id)
         
         if not task:
@@ -707,9 +724,13 @@ async def receive_complete_photo(update: Update, context: ContextTypes.DEFAULT_T
         photo_file_id = context.user_data.get('completing_photo')
         
         # Обновляем задачу в БД
-        from database import Database
+        # Используем глобальный экземпляр db из context.bot_data
         from datetime import datetime
-        db = Database()
+        if 'db' in context.bot_data:
+            db = context.bot_data['db']
+        else:
+            from database import Database
+            db = Database()
         db.update_custom_task(
             task_id,
             status='completed',
@@ -766,9 +787,13 @@ async def skip_complete_photo(update: Update, context: ContextTypes.DEFAULT_TYPE
         result_text = context.user_data.get('completing_result', '')
         
         # Обновляем задачу в БД
-        from database import Database
+        # Используем глобальный экземпляр db из context.bot_data
         from datetime import datetime
-        db = Database()
+        if 'db' in context.bot_data:
+            db = context.bot_data['db']
+        else:
+            from database import Database
+            db = Database()
         db.update_custom_task(
             task_id,
             status='completed',
@@ -822,9 +847,13 @@ async def complete_fast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             return -1
         
         # Обновляем задачу в БД
-        from database import Database
+        # Используем глобальный экземпляр db из context.bot_data
         from datetime import datetime
-        db = Database()
+        if 'db' in context.bot_data:
+            db = context.bot_data['db']
+        else:
+            from database import Database
+            db = Database()
         db.update_custom_task(
             task_id,
             status='completed',

@@ -28,7 +28,8 @@ class Database:
     
     def get_connection(self):
         """Создает соединение с базой данных"""
-        return sqlite3.connect(self.db_path, check_same_thread=False)
+        # Используем timeout для предотвращения блокировок
+        return sqlite3.connect(self.db_path, check_same_thread=False, timeout=10.0)
     
     def init_database(self):
         """Создает таблицы в базе данных, если их еще нет"""
@@ -114,24 +115,24 @@ class Database:
         try:
             with db_lock:
                 conn = self.get_connection()
-                cursor = conn.cursor()
-                
-                cursor.execute(
-                    'SELECT status FROM task_statuses WHERE task_key = ?',
-                    (task_key,)
-                )
-                
-                result = cursor.fetchone()
-                conn.close()
-                
-                if result:
-                    return result[0]
-                else:
-                    # Если статуса нет, возвращаем дефолтный без создания записи
-                    # Запись будет создана при первом set_task_status
-                    return '⚪'
+                try:
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        'SELECT status FROM task_statuses WHERE task_key = ?',
+                        (task_key,)
+                    )
+                    result = cursor.fetchone()
+                    if result:
+                        return result[0]
+                    else:
+                        # Если статуса нет, возвращаем дефолтный без создания записи
+                        # Запись будет создана при первом set_task_status
+                        return '⚪'
+                finally:
+                    conn.close()
         except Exception as e:
             # В случае ошибки возвращаем дефолтный статус
+            logger_db.error(f"Ошибка получения статуса задачи {task_key}: {e}", exc_info=True)
             return '⚪'
     
     def set_task_status(self, task_key: str, status: str):
@@ -143,15 +144,15 @@ class Database:
         try:
             with db_lock:
                 conn = self.get_connection()
-                cursor = conn.cursor()
-                
-                cursor.execute('''
-                    INSERT OR REPLACE INTO task_statuses (task_key, status)
-                    VALUES (?, ?)
-                ''', (task_key, status))
-                
-                conn.commit()
-                conn.close()
+                try:
+                    cursor = conn.cursor()
+                    cursor.execute('''
+                        INSERT OR REPLACE INTO task_statuses (task_key, status)
+                        VALUES (?, ?)
+                    ''', (task_key, status))
+                    conn.commit()
+                finally:
+                    conn.close()
         except Exception as e:
             # Логируем ошибку, но не падаем
             logger_db.error(f"Ошибка сохранения статуса {task_key}={status}: {e}", exc_info=True)
@@ -166,15 +167,15 @@ class Database:
         try:
             with db_lock:
                 conn = self.get_connection()
-                cursor = conn.cursor()
-                
-                cursor.execute('''
-                    INSERT OR REPLACE INTO users (username, user_id, initials)
-                    VALUES (?, ?, ?)
-                ''', (username, user_id, initials))
-                
-                conn.commit()
-                conn.close()
+                try:
+                    cursor = conn.cursor()
+                    cursor.execute('''
+                        INSERT OR REPLACE INTO users (username, user_id, initials)
+                        VALUES (?, ?, ?)
+                    ''', (username, user_id, initials))
+                    conn.commit()
+                finally:
+                    conn.close()
         except Exception as e:
             # Логируем ошибку, но не падаем
             logger_db.error(f"Ошибка сохранения ID пользователя {username}: {e}", exc_info=True)
@@ -187,13 +188,13 @@ class Database:
         try:
             with db_lock:
                 conn = self.get_connection()
-                cursor = conn.cursor()
-                
-                cursor.execute('SELECT user_id FROM users WHERE user_id IS NOT NULL')
-                results = cursor.fetchall()
-                conn.close()
-                
-                return [row[0] for row in results if row[0] is not None]
+                try:
+                    cursor = conn.cursor()
+                    cursor.execute('SELECT user_id FROM users WHERE user_id IS NOT NULL')
+                    results = cursor.fetchall()
+                    return [row[0] for row in results if row[0] is not None]
+                finally:
+                    conn.close()
         except Exception as e:
             # Логируем ошибку, но не падаем
             logger_db.error(f"Ошибка получения списка ID пользователей: {e}", exc_info=True)
@@ -208,19 +209,18 @@ class Database:
         try:
             with db_lock:
                 conn = self.get_connection()
-                cursor = conn.cursor()
-                
-                cursor.execute(
-                    'SELECT user_id FROM users WHERE username = ?',
-                    (username,)
-                )
-                
-                result = cursor.fetchone()
-                conn.close()
-                
-                if result and result[0] is not None:
-                    return result[0]
-                return None
+                try:
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        'SELECT user_id FROM users WHERE username = ?',
+                        (username,)
+                    )
+                    result = cursor.fetchone()
+                    if result and result[0] is not None:
+                        return result[0]
+                    return None
+                finally:
+                    conn.close()
         except Exception as e:
             # Логируем ошибку, но не падаем
             logger_db.error(f"Ошибка получения ID пользователя {username}: {e}", exc_info=True)
@@ -231,18 +231,20 @@ class Database:
         try:
             with db_lock:
                 conn = self.get_connection()
-                cursor = conn.cursor()
-                from datetime import datetime
-                created_at = datetime.now().isoformat()
-                cursor.execute('''
-                    INSERT INTO custom_tasks (title, description, deadline, assignee, creator, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                ''', (title, description, deadline, assignee, creator, created_at))
-                task_id = cursor.lastrowid
-                conn.commit()
-                conn.close()
-                logger_db.info(f"Задача #{task_id} сохранена: {title}")
-                return task_id
+                try:
+                    cursor = conn.cursor()
+                    from datetime import datetime
+                    created_at = datetime.now().isoformat()
+                    cursor.execute('''
+                        INSERT INTO custom_tasks (title, description, deadline, assignee, creator, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    ''', (title, description, deadline, assignee, creator, created_at))
+                    task_id = cursor.lastrowid
+                    conn.commit()
+                    logger_db.info(f"Задача #{task_id} сохранена: {title}")
+                    return task_id
+                finally:
+                    conn.close()
         except Exception as e:
             logger_db.error(f"Ошибка сохранения новой задачи: {e}", exc_info=True)
             return None
@@ -252,21 +254,23 @@ class Database:
         try:
             with db_lock:
                 conn = self.get_connection()
-                cursor = conn.cursor()
-                if status:
-                    cursor.execute('SELECT * FROM custom_tasks WHERE status = ?', (status,))
-                else:
-                    cursor.execute('SELECT * FROM custom_tasks')
-                tasks = []
-                for row in cursor.fetchall():
-                    tasks.append({
-                        'task_id': row[0], 'title': row[1], 'description': row[2],
-                        'deadline': row[3], 'assignee': row[4], 'creator': row[5],
-                        'status': row[6], 'created_at': row[7], 'completed_at': row[8],
-                        'result_text': row[9], 'result_photo': row[10]
-                    })
-                conn.close()
-                return tasks
+                try:
+                    cursor = conn.cursor()
+                    if status:
+                        cursor.execute('SELECT * FROM custom_tasks WHERE status = ?', (status,))
+                    else:
+                        cursor.execute('SELECT * FROM custom_tasks')
+                    tasks = []
+                    for row in cursor.fetchall():
+                        tasks.append({
+                            'task_id': row[0], 'title': row[1], 'description': row[2],
+                            'deadline': row[3], 'assignee': row[4], 'creator': row[5],
+                            'status': row[6], 'created_at': row[7], 'completed_at': row[8],
+                            'result_text': row[9], 'result_photo': row[10]
+                        })
+                    return tasks
+                finally:
+                    conn.close()
         except Exception as e:
             logger_db.error(f"Ошибка получения списка задач: {e}", exc_info=True)
             return []
@@ -276,18 +280,20 @@ class Database:
         try:
             with db_lock:
                 conn = self.get_connection()
-                cursor = conn.cursor()
-                cursor.execute('SELECT * FROM custom_tasks WHERE task_id = ?', (task_id,))
-                row = cursor.fetchone()
-                conn.close()
-                if row:
-                    return {
-                        'task_id': row[0], 'title': row[1], 'description': row[2],
-                        'deadline': row[3], 'assignee': row[4], 'creator': row[5],
-                        'status': row[6], 'created_at': row[7], 'completed_at': row[8],
-                        'result_text': row[9], 'result_photo': row[10]
-                    }
-                return None
+                try:
+                    cursor = conn.cursor()
+                    cursor.execute('SELECT * FROM custom_tasks WHERE task_id = ?', (task_id,))
+                    row = cursor.fetchone()
+                    if row:
+                        return {
+                            'task_id': row[0], 'title': row[1], 'description': row[2],
+                            'deadline': row[3], 'assignee': row[4], 'creator': row[5],
+                            'status': row[6], 'created_at': row[7], 'completed_at': row[8],
+                            'result_text': row[9], 'result_photo': row[10]
+                        }
+                    return None
+                finally:
+                    conn.close()
         except Exception as e:
             logger_db.error(f"Ошибка получения задачи {task_id}: {e}", exc_info=True)
             return None
@@ -297,20 +303,22 @@ class Database:
         try:
             with db_lock:
                 conn = self.get_connection()
-                cursor = conn.cursor()
-                set_clauses = []
-                values = []
-                for key, value in kwargs.items():
-                    set_clauses.append(f"{key} = ?")
-                    values.append(value)
-                
-                if set_clauses:
-                    values.append(task_id)
-                    query = f"UPDATE custom_tasks SET {', '.join(set_clauses)} WHERE task_id = ?"
-                    cursor.execute(query, tuple(values))
-                    conn.commit()
-                conn.close()
-                logger_db.info(f"Задача #{task_id} обновлена: {list(kwargs.keys())}")
+                try:
+                    cursor = conn.cursor()
+                    set_clauses = []
+                    values = []
+                    for key, value in kwargs.items():
+                        set_clauses.append(f"{key} = ?")
+                        values.append(value)
+                    
+                    if set_clauses:
+                        values.append(task_id)
+                        query = f"UPDATE custom_tasks SET {', '.join(set_clauses)} WHERE task_id = ?"
+                        cursor.execute(query, tuple(values))
+                        conn.commit()
+                    logger_db.info(f"Задача #{task_id} обновлена: {list(kwargs.keys())}")
+                finally:
+                    conn.close()
         except Exception as e:
             logger_db.error(f"Ошибка обновления задачи {task_id}: {e}", exc_info=True)
     
@@ -319,11 +327,13 @@ class Database:
         try:
             with db_lock:
                 conn = self.get_connection()
-                cursor = conn.cursor()
-                cursor.execute('DELETE FROM custom_tasks WHERE task_id = ?', (task_id,))
-                conn.commit()
-                conn.close()
-                logger_db.info(f"Задача #{task_id} удалена")
+                try:
+                    cursor = conn.cursor()
+                    cursor.execute('DELETE FROM custom_tasks WHERE task_id = ?', (task_id,))
+                    conn.commit()
+                    logger_db.info(f"Задача #{task_id} удалена")
+                finally:
+                    conn.close()
         except Exception as e:
             logger_db.error(f"Ошибка удаления задачи {task_id}: {e}", exc_info=True)
     
@@ -332,18 +342,20 @@ class Database:
         try:
             with db_lock:
                 conn = self.get_connection()
-                cursor = conn.cursor()
-                from datetime import datetime
-                date_str = datetime.now().strftime("%Y-%m-%d")
-                created_at = datetime.now().isoformat()
-                
-                cursor.execute('''
-                    INSERT OR REPLACE INTO presence (username, user_id, date, status, time, delay_minutes, reason, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (username, user_id, date_str, status, time, delay_minutes, reason, created_at))
-                conn.commit()
-                conn.close()
-                logger_db.info(f"Отметка присутствия сохранена для {username}: {status}")
+                try:
+                    cursor = conn.cursor()
+                    from datetime import datetime
+                    date_str = datetime.now().strftime("%Y-%m-%d")
+                    created_at = datetime.now().isoformat()
+                    
+                    cursor.execute('''
+                        INSERT OR REPLACE INTO presence (username, user_id, date, status, time, delay_minutes, reason, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (username, user_id, date_str, status, time, delay_minutes, reason, created_at))
+                    conn.commit()
+                    logger_db.info(f"Отметка присутствия сохранена для {username}: {status}")
+                finally:
+                    conn.close()
         except Exception as e:
             logger_db.error(f"Ошибка сохранения отметки присутствия для {username}: {e}", exc_info=True)
 

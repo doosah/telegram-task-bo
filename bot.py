@@ -689,6 +689,10 @@ def main():
         application = Application.builder().token(BOT_TOKEN).build()
         logger.info("Приложение бота создано")
         
+        # Сохраняем глобальный экземпляр db в bot_data для использования в ConversationHandlers
+        application.bot_data['db'] = db
+        logger.info("Глобальный экземпляр db сохранен в bot_data")
+        
         # Регистрируем обработчики команд
         application.add_handler(CommandHandler("start", start_command))
         logger.info("Обработчик /start зарегистрирован")

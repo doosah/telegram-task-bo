@@ -99,7 +99,7 @@ async def handle_presence_callback(query, data: str, context: ContextTypes.DEFAU
             await query.answer("❌ Пользователь не найден", show_alert=True)
             return
         
-        username = user.username
+        username = user.username if user.username else f"user_{user.id}"
         user_id = user.id
         
         if data == "presence_here":
@@ -136,7 +136,7 @@ async def handle_delay_callback(query, data: str, context: ContextTypes.DEFAULT_
             await query.answer("❌ Пользователь не найден", show_alert=True)
             return
         
-        username = user.username
+        username = user.username if user.username else f"user_{user.id}"
         user_id = user.id
         
         parts = data.split("_")
