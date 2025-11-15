@@ -126,72 +126,104 @@ async def send_custom_task_reminders(app: Application):
             # Определяем, нужно ли отправлять напоминание
             should_remind = False
             reminder_text = ""
+            reminder_key = None  # Ключ для отслеживания отправленных напоминаний
             
             # Если задача на день (дедлайн сегодня)
             if days_until == 0:
                 # Напоминания в день дедлайна: 9:00, 12:00, 14:00, 16:00
                 current_hour = now.hour
-                if current_hour in [9, 12, 14, 16]:
-                    should_remind = True
-                    reminder_text = (
-                        f"⏰ **НАПОМИНАНИЕ О ЗАДАЧЕ**\n\n"
-                        f"📝 Задача: {task['title']}\n"
-                        f"⏰ Срок: {deadline_str}\n"
-                        f"👤 Исполнитель: {assignee_names.get(task.get('assignee', 'all'), 'Все')}\n\n"
-                        f"⚠️ Не забудьте выполнить задачу!"
-                    )
+                if current_hour in [9, 12, 14, 16] and now.minute < 5:
+                    reminder_key = f"task_{task['task_id']}_hour_{current_hour}"
+                    if not hasattr(app.bot_data, 'sent_reminders'):
+                        app.bot_data['sent_reminders'] = set()
+                    if reminder_key not in app.bot_data['sent_reminders']:
+                        should_remind = True
+                        app.bot_data['sent_reminders'].add(reminder_key)
+                        reminder_text = (
+                            f"⏰ **НАПОМИНАНИЕ О ЗАДАЧЕ**\n\n"
+                            f"📝 Задача: {task['title']}\n"
+                            f"⏰ Срок: {deadline_str}\n"
+                            f"👤 Исполнитель: {assignee_names.get(task.get('assignee', 'all'), 'Все')}\n\n"
+                            f"⚠️ Не забудьте выполнить задачу!"
+                        )
                 
                 # Напоминания за определенное время до дедлайна
                 if hours_until <= 4 and hours_until > 0:
                     # За 4 часа, 2 часа, 1 час, 30 минут
                     if 3.5 <= hours_until <= 4.5:
-                        should_remind = True
-                        reminder_text = (
-                            f"⏰ **НАПОМИНАНИЕ О ЗАДАЧЕ**\n\n"
-                            f"📝 Задача: {task['title']}\n"
-                            f"⏰ Срок: {deadline_str}\n"
-                            f"⏳ До дедлайна осталось ~4 часа\n"
-                            f"👤 Исполнитель: {assignee_names.get(task.get('assignee', 'all'), 'Все')}"
-                        )
+                        reminder_key = f"task_{task['task_id']}_4h"
+                        # Проверяем, не отправляли ли уже это напоминание
+                        if not hasattr(app.bot_data, 'sent_reminders'):
+                            app.bot_data['sent_reminders'] = set()
+                        if reminder_key not in app.bot_data['sent_reminders']:
+                            should_remind = True
+                            app.bot_data['sent_reminders'].add(reminder_key)
+                            reminder_text = (
+                                f"⏰ **НАПОМИНАНИЕ О ЗАДАЧЕ**\n\n"
+                                f"📝 Задача: {task['title']}\n"
+                                f"⏰ Срок: {deadline_str}\n"
+                                f"⏳ До дедлайна осталось ~4 часа\n"
+                                f"👤 Исполнитель: {assignee_names.get(task.get('assignee', 'all'), 'Все')}"
+                            )
                     elif 1.5 <= hours_until <= 2.5:
-                        should_remind = True
-                        reminder_text = (
-                            f"⏰ **НАПОМИНАНИЕ О ЗАДАЧЕ**\n\n"
-                            f"📝 Задача: {task['title']}\n"
-                            f"⏰ Срок: {deadline_str}\n"
-                            f"⏳ До дедлайна осталось ~2 часа\n"
-                            f"👤 Исполнитель: {assignee_names.get(task.get('assignee', 'all'), 'Все')}"
-                        )
+                        reminder_key = f"task_{task['task_id']}_2h"
+                        if not hasattr(app.bot_data, 'sent_reminders'):
+                            app.bot_data['sent_reminders'] = set()
+                        if reminder_key not in app.bot_data['sent_reminders']:
+                            should_remind = True
+                            app.bot_data['sent_reminders'].add(reminder_key)
+                            reminder_text = (
+                                f"⏰ **НАПОМИНАНИЕ О ЗАДАЧЕ**\n\n"
+                                f"📝 Задача: {task['title']}\n"
+                                f"⏰ Срок: {deadline_str}\n"
+                                f"⏳ До дедлайна осталось ~2 часа\n"
+                                f"👤 Исполнитель: {assignee_names.get(task.get('assignee', 'all'), 'Все')}"
+                            )
                     elif 0.5 <= hours_until <= 1.5:
-                        should_remind = True
-                        reminder_text = (
-                            f"⏰ **НАПОМИНАНИЕ О ЗАДАЧЕ**\n\n"
-                            f"📝 Задача: {task['title']}\n"
-                            f"⏰ Срок: {deadline_str}\n"
-                            f"⏳ До дедлайна осталось ~1 час\n"
-                            f"👤 Исполнитель: {assignee_names.get(task.get('assignee', 'all'), 'Все')}"
-                        )
+                        reminder_key = f"task_{task['task_id']}_1h"
+                        if not hasattr(app.bot_data, 'sent_reminders'):
+                            app.bot_data['sent_reminders'] = set()
+                        if reminder_key not in app.bot_data['sent_reminders']:
+                            should_remind = True
+                            app.bot_data['sent_reminders'].add(reminder_key)
+                            reminder_text = (
+                                f"⏰ **НАПОМИНАНИЕ О ЗАДАЧЕ**\n\n"
+                                f"📝 Задача: {task['title']}\n"
+                                f"⏰ Срок: {deadline_str}\n"
+                                f"⏳ До дедлайна осталось ~1 час\n"
+                                f"👤 Исполнитель: {assignee_names.get(task.get('assignee', 'all'), 'Все')}"
+                            )
                     elif 0.25 <= hours_until <= 0.5:
-                        should_remind = True
-                        reminder_text = (
-                            f"⏰ **НАПОМИНАНИЕ О ЗАДАЧЕ**\n\n"
-                            f"📝 Задача: {task['title']}\n"
-                            f"⏰ Срок: {deadline_str}\n"
-                            f"⏳ До дедлайна осталось ~30 минут\n"
-                            f"👤 Исполнитель: {assignee_names.get(task.get('assignee', 'all'), 'Все')}"
-                        )
+                        reminder_key = f"task_{task['task_id']}_30m"
+                        if not hasattr(app.bot_data, 'sent_reminders'):
+                            app.bot_data['sent_reminders'] = set()
+                        if reminder_key not in app.bot_data['sent_reminders']:
+                            should_remind = True
+                            app.bot_data['sent_reminders'].add(reminder_key)
+                            reminder_text = (
+                                f"⏰ **НАПОМИНАНИЕ О ЗАДАЧЕ**\n\n"
+                                f"📝 Задача: {task['title']}\n"
+                                f"⏰ Срок: {deadline_str}\n"
+                                f"⏳ До дедлайна осталось ~30 минут\n"
+                                f"👤 Исполнитель: {assignee_names.get(task.get('assignee', 'all'), 'Все')}"
+                            )
             else:
                 # За несколько дней до дедлайна - напоминание раз в день
                 # Отправляем в 9:00 каждый день
                 if now.hour == 9 and now.minute < 5:
-                    should_remind = True
-                    reminder_text = (
-                        f"⏰ **НАПОМИНАНИЕ О ЗАДАЧЕ**\n\n"
-                        f"📝 Задача: {task['title']}\n"
-                        f"⏰ Срок: {deadline_str}\n"
-                        f"📅 До дедлайна осталось {days_until} {'день' if days_until == 1 else 'дня' if days_until < 5 else 'дней'}\n"
-                        f"👤 Исполнитель: {assignee_names.get(task.get('assignee', 'all'), 'Все')}"
-                    )
+                    reminder_key = f"task_{task['task_id']}_day_{now.date()}"
+                    if not hasattr(app.bot_data, 'sent_reminders'):
+                        app.bot_data['sent_reminders'] = set()
+                    if reminder_key not in app.bot_data['sent_reminders']:
+                        should_remind = True
+                        app.bot_data['sent_reminders'].add(reminder_key)
+                        reminder_text = (
+                            f"⏰ **НАПОМИНАНИЕ О ЗАДАЧЕ**\n\n"
+                            f"📝 Задача: {task['title']}\n"
+                            f"⏰ Срок: {deadline_str}\n"
+                            f"📅 До дедлайна осталось {days_until} {'день' if days_until == 1 else 'дня' if days_until < 5 else 'дней'}\n"
+                            f"👤 Исполнитель: {assignee_names.get(task.get('assignee', 'all'), 'Все')}"
+                        )
             
             if should_remind and reminder_text:
                 try:
