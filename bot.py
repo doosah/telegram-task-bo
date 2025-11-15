@@ -217,152 +217,183 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     
-    # Парсим данные из кнопки
-    data = query.data
-    if not data.startswith("task_"):
-        return
-    
-    parts = data.split("_")
-    if len(parts) != 2:
-        return
-    
-    task_id = parts[1]
-    
-    # Получаем пользователя
-    user = query.from_user
-    user_id = user.id
-    username = user.username
-    
-    # Определяем, какой пользователь нажал (АГ, КА или СА)
-    user_mapping = {
-        "alex301182": {"initials": "AG", "name": "АГ"},
-        "Korudirp": {"initials": "KA", "name": "КА"},
-        "sanya_hui_sosi1488": {"initials": "SA", "name": "СА"}
-    }
-    
-    # Определяем, кто нажал
-    user_initials = None
-    user_name = None
-    
-    if username in user_mapping:
-        user_initials = user_mapping[username]["initials"]
-        user_name = user_mapping[username]["name"]
-    else:
-        # Проверяем по ID из базы
-        for uname, info in user_mapping.items():
-            saved_id = db.get_user_id_by_username(uname)
-            if saved_id == user_id:
-                user_initials = info["initials"]
-                user_name = info["name"]
-                username = uname
-                break
-    
-    if not user_initials:
-        await query.answer("❌ Вы не в списке участников", show_alert=True)
-        return
-    
-    # Сохраняем ID пользователя в базу данных
-    db.save_user_id(username, user_id, user_initials)
-    
-    # Получаем текущие статусы для АГ, КА и СА
-    status_ag = db.get_task_status(f"{task_id}_AG") or "⚪"
-    status_ka = db.get_task_status(f"{task_id}_KA") or "⚪"
-    status_sa = db.get_task_status(f"{task_id}_SA") or "⚪"
-    
-    # Меняем статус для текущего пользователя: ⚪ → ⏳ → ✅
-    status_key = f"{task_id}_{user_initials}"
-    current_status = db.get_task_status(status_key) or "⚪"
-    
-    # Цикл: ⚪ → ⏳ → ✅ → ⚪
-    status_cycle = {"⚪": "⏳", "⏳": "✅", "✅": "⚪"}
-    new_status = status_cycle.get(current_status, "⚪")
-    
-    # Сохраняем новый статус
-    db.set_task_status(status_key, new_status)
-    
-    # Обновляем статусы после изменения
-    if user_initials == "AG":
-        status_ag = new_status
-    elif user_initials == "KA":
-        status_ka = new_status
-    elif user_initials == "SA":
-        status_sa = new_status
-    
-    # Определяем общий статус задачи для отображения (✅ только когда все 3 выполнили)
-    if status_ag == "✅" and status_ka == "✅" and status_sa == "✅":
-        task_status = "✅"  # Все трое выполнили
-    elif status_ag != "⚪" or status_ka != "⚪" or status_sa != "⚪":
-        task_status = "⏳"  # Кто-то взял в работу
-    else:
-        task_status = "⚪"  # Никто не взял
-    
-    # Обновляем сообщение - обновляем кнопку для этой задачи
-    current_markup = query.message.reply_markup
-    
-    if current_markup and current_markup.inline_keyboard:
-        # Находим текст задачи из сообщения
-        message_text = query.message.text or ""
+    try:
+        # Парсим данные из кнопки
+        data = query.data
+        logger.info(f"Нажата кнопка: {data}")
         
-        # Извлекаем номер задачи из task_id (формат: "0_1" -> номер "1")
-        task_num = task_id.split("_")[-1] if "_" in task_id else task_id
+        if not data.startswith("task_"):
+            return
         
-        # Ищем задачу в тексте сообщения
-        task_text = ""
-        for line in message_text.split("\n"):
-            line_stripped = line.strip()
-            # Проверяем, начинается ли строка с номера задачи
-            if line_stripped.startswith(f"{task_num}."):
-                # Извлекаем текст задачи (убираем номер и статус)
-                task_text = line_stripped
-                # Убираем номер задачи
-                if "." in task_text:
-                    task_text = task_text.split(".", 1)[1].strip()
-                # Убираем статусы если есть
-                task_text = task_text.replace("⚪", "").replace("⏳", "").replace("✅", "").strip()
-                # Убираем markdown форматирование если есть
-                task_text = task_text.replace("**", "").strip()
-                break
+        parts = data.split("_")
+        if len(parts) != 2:
+            return
         
-        # Если не нашли в тексте - используем текст из кнопки
-        if not task_text:
+        task_id = parts[1]
+        logger.info(f"Обработка задачи: {task_id}")
+        
+        # Получаем пользователя
+        user = query.from_user
+        user_id = user.id
+        username = user.username
+        logger.info(f"Пользователь: @{username} (ID: {user_id})")
+        
+        # Определяем, какой пользователь нажал (АГ, КА или СА)
+        user_mapping = {
+            "alex301182": {"initials": "AG", "name": "АГ"},
+            "Korudirp": {"initials": "KA", "name": "КА"},
+            "sanya_hui_sosi1488": {"initials": "SA", "name": "СА"}
+        }
+        
+        # Определяем, кто нажал
+        user_initials = None
+        user_name = None
+        
+        if username in user_mapping:
+            user_initials = user_mapping[username]["initials"]
+            user_name = user_mapping[username]["name"]
+            logger.info(f"Пользователь найден: {user_name} ({user_initials})")
+        else:
+            # Проверяем по ID из базы
+            logger.info(f"Username не найден, проверяем по ID...")
+            for uname, info in user_mapping.items():
+                saved_id = db.get_user_id_by_username(uname)
+                if saved_id == user_id:
+                    user_initials = info["initials"]
+                    user_name = info["name"]
+                    username = uname
+                    logger.info(f"Пользователь найден по ID: {user_name} ({user_initials})")
+                    break
+        
+        if not user_initials:
+            logger.warning(f"Пользователь @{username} (ID: {user_id}) не в списке участников")
+            await query.answer("❌ Вы не в списке участников", show_alert=True)
+            return
+        
+        # Сохраняем ID пользователя в базу данных
+        db.save_user_id(username, user_id, user_initials)
+        
+        # Получаем текущие статусы для АГ, КА и СА
+        status_ag = db.get_task_status(f"{task_id}_AG") or "⚪"
+        status_ka = db.get_task_status(f"{task_id}_KA") or "⚪"
+        status_sa = db.get_task_status(f"{task_id}_SA") or "⚪"
+        logger.info(f"Текущие статусы: АГ={status_ag}, КА={status_ka}, СА={status_sa}")
+        
+        # Меняем статус для текущего пользователя: ⚪ → ⏳ → ✅
+        status_key = f"{task_id}_{user_initials}"
+        current_status = db.get_task_status(status_key) or "⚪"
+        
+        # Цикл: ⚪ → ⏳ → ✅ → ⚪
+        status_cycle = {"⚪": "⏳", "⏳": "✅", "✅": "⚪"}
+        new_status = status_cycle.get(current_status, "⚪")
+        logger.info(f"Статус {user_initials}: {current_status} → {new_status}")
+        
+        # Сохраняем новый статус
+        db.set_task_status(status_key, new_status)
+        
+        # Обновляем статусы после изменения
+        if user_initials == "AG":
+            status_ag = new_status
+        elif user_initials == "KA":
+            status_ka = new_status
+        elif user_initials == "SA":
+            status_sa = new_status
+        
+        # Определяем общий статус задачи для отображения (✅ только когда все 3 выполнили)
+        if status_ag == "✅" and status_ka == "✅" and status_sa == "✅":
+            task_status = "✅"  # Все трое выполнили
+        elif status_ag != "⚪" or status_ka != "⚪" or status_sa != "⚪":
+            task_status = "⏳"  # Кто-то взял в работу
+        else:
+            task_status = "⚪"  # Никто не взял
+        
+        logger.info(f"Общий статус задачи: {task_status}")
+        
+        # Обновляем сообщение - обновляем кнопку для этой задачи
+        current_markup = query.message.reply_markup
+        
+        if current_markup and current_markup.inline_keyboard:
+            # Извлекаем номер задачи из task_id (формат: "0_1" -> номер "1")
+            task_num = task_id.split("_")[-1] if "_" in task_id else task_id
+            
+            # Ищем текст задачи из кнопки (это надежнее)
+            task_text = ""
+            original_button_text = ""
+            
             for row in current_markup.inline_keyboard:
                 for button in row:
                     if button.callback_data == f"task_{task_id}":
-                        button_text = button.text
-                        # Убираем номер и статус из текста кнопки
+                        original_button_text = button.text
+                        # Извлекаем текст задачи из кнопки
                         # Формат: "1. Название задачи ⚪"
-                        if "." in button_text:
-                            task_text = button_text.split(".", 1)[1].strip()
+                        if "." in original_button_text:
+                            # Разделяем на номер и остальное
+                            parts_btn = original_button_text.split(".", 1)
+                            task_text = parts_btn[1].strip() if len(parts_btn) > 1 else original_button_text
+                            # Убираем статусы
+                            task_text = task_text.replace("⚪", "").replace("⏳", "").replace("✅", "").strip()
                         else:
-                            task_text = button_text
-                        # Убираем статусы
-                        task_text = task_text.replace("⚪", "").replace("⏳", "").replace("✅", "").strip()
+                            task_text = original_button_text.replace("⚪", "").replace("⏳", "").replace("✅", "").strip()
+                        logger.info(f"Текст задачи из кнопки: '{task_text}'")
                         break
                 if task_text:
                     break
+            
+            # Если не нашли в кнопке - ищем в тексте сообщения
+            if not task_text:
+                message_text = query.message.text or ""
+                for line in message_text.split("\n"):
+                    line_stripped = line.strip()
+                    if line_stripped.startswith(f"{task_num}."):
+                        task_text = line_stripped
+                        if "." in task_text:
+                            task_text = task_text.split(".", 1)[1].strip()
+                        task_text = task_text.replace("⚪", "").replace("⏳", "").replace("✅", "").replace("**", "").strip()
+                        logger.info(f"Текст задачи из сообщения: '{task_text}'")
+                        break
+            
+            if not task_text:
+                logger.error(f"Не удалось извлечь текст задачи для {task_id}")
+                await query.answer("❌ Ошибка обновления", show_alert=True)
+                return
+            
+            # Обновляем кнопки в текущей клавиатуре
+            new_keyboard = []
+            for row in current_markup.inline_keyboard:
+                new_row = []
+                for button in row:
+                    # Если это кнопка для нашей задачи - обновляем статус
+                    if button.callback_data == f"task_{task_id}":
+                        # Сохраняем номер задачи в новом тексте
+                        new_text = f"{task_num}. {task_text} {task_status}"
+                        logger.info(f"Обновляем кнопку: '{original_button_text}' → '{new_text}'")
+                        new_row.append(InlineKeyboardButton(new_text, callback_data=button.callback_data))
+                    else:
+                        new_row.append(button)
+                new_keyboard.append(new_row)
+            
+            updated_keyboard = InlineKeyboardMarkup(new_keyboard)
+            try:
+                await query.edit_message_reply_markup(reply_markup=updated_keyboard)
+                logger.info(f"✅ Кнопка обновлена успешно")
+            except Exception as e:
+                logger.error(f"❌ Ошибка обновления кнопки: {e}")
+                await query.answer("❌ Ошибка обновления", show_alert=True)
+        else:
+            logger.warning("Клавиатура не найдена в сообщении")
         
-        # Обновляем кнопки в текущей клавиатуре
-        new_keyboard = []
-        for row in current_markup.inline_keyboard:
-            new_row = []
-            for button in row:
-                # Если это кнопка для нашей задачи - обновляем статус
-                if button.callback_data == f"task_{task_id}":
-                    # Обновляем текст кнопки с новым статусом
-                    new_text = f"{task_text} {task_status}"
-                    new_row.append(InlineKeyboardButton(new_text, callback_data=button.callback_data))
-                else:
-                    new_row.append(button)
-            new_keyboard.append(new_row)
-        
-        updated_keyboard = InlineKeyboardMarkup(new_keyboard)
-        await query.edit_message_reply_markup(reply_markup=updated_keyboard)
-    
-    # Отправляем подтверждение
-    if task_status == "✅":
-        await query.answer(f"✅ Задача выполнена! (все участники)", show_alert=False)
-    else:
-        await query.answer(f"⏳ {user_name} взял задачу в работу", show_alert=False)
+        # Отправляем подтверждение
+        if task_status == "✅":
+            await query.answer(f"✅ Задача выполнена! (все участники)", show_alert=False)
+        else:
+            await query.answer(f"⏳ {user_name} взял задачу в работу", show_alert=False)
+            
+    except Exception as e:
+        logger.error(f"❌ ОШИБКА в button_callback: {e}", exc_info=True)
+        try:
+            await query.answer("❌ Произошла ошибка", show_alert=True)
+        except:
+            pass
 
 
 async def send_morning_tasks(app, force_weekend=False):
@@ -617,6 +648,20 @@ def main():
         # Запускаем бота
         logger.info("Бот запущен и готов к работе!")
         logger.info("Ожидание команд...")
+        
+        # Добавляем обработчик ошибок Conflict
+        async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+            """Обработчик ошибок"""
+            error = context.error
+            if isinstance(error, Exception):
+                if "Conflict" in str(type(error).__name__) or "409" in str(error):
+                    logger.warning(f"Conflict error (возможно запущено несколько экземпляров): {error}")
+                    # Не падаем, просто логируем
+                else:
+                    logger.error(f"Необработанная ошибка: {error}", exc_info=error)
+        
+        application.add_error_handler(error_handler)
+        
         application.run_polling(
             allowed_updates=Update.ALL_TYPES,
             drop_pending_updates=True
