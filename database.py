@@ -54,6 +54,39 @@ class Database:
                     )
                 ''')
                 
+                # Таблица для новых задач (созданных через меню)
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS custom_tasks (
+                        task_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        title TEXT NOT NULL,
+                        description TEXT,
+                        deadline TEXT,
+                        assignee TEXT,
+                        creator TEXT NOT NULL,
+                        status TEXT DEFAULT 'active',
+                        created_at TEXT NOT NULL,
+                        completed_at TEXT,
+                        result_text TEXT,
+                        result_photo TEXT
+                    )
+                ''')
+                
+                # Таблица для отметок присутствия
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS presence (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        username TEXT NOT NULL,
+                        user_id INTEGER NOT NULL,
+                        date TEXT NOT NULL,
+                        status TEXT NOT NULL,
+                        time TEXT,
+                        delay_minutes INTEGER,
+                        reason TEXT,
+                        created_at TEXT NOT NULL,
+                        UNIQUE(username, date)
+                    )
+                ''')
+                
                 # Добавляем начальных пользователей, если их еще нет
                 initial_users = [
                     ('alex301182', None, 'AG'),

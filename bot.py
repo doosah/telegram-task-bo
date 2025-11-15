@@ -12,7 +12,10 @@ from telegram.ext import (
     Application,
     CommandHandler,
     CallbackQueryHandler,
-    ContextTypes
+    MessageHandler,
+    ConversationHandler,
+    ContextTypes,
+    filters
 )
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -21,6 +24,11 @@ import pytz
 # Импортируем наши модули
 from database import Database
 from tasks import Tasks
+from menu import (
+    get_main_menu, get_tasks_menu, get_task_actions_menu,
+    get_confirm_menu, get_assignee_menu, get_presence_menu,
+    get_delay_time_menu, get_delay_minutes_menu
+)
 
 # Настройка логирования (записи о работе бота)
 logging.basicConfig(
@@ -255,10 +263,50 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         data = query.data
         logger.info(f"Нажата кнопка: {data}")
         
-        if not data or not data.startswith("task_"):
-            logger.warning(f"Неверный формат данных кнопки: {data}")
+        if not data:
+            logger.warning(f"Пустые данные кнопки")
             await query.answer()
             return
+        
+        # Обработка меню
+        if data.startswith("menu_"):
+            await handle_menu_callback(query, data, context)
+            return
+        
+        # Обработка присутствия
+        if data.startswith("presence_"):
+            await handle_presence_callback(query, data, context)
+            return
+        
+        # Обработка задержки
+        if data.startswith("delay_"):
+            await handle_delay_callback(query, data, context)
+            return
+        
+        # Обработка задач из меню
+        if data.startswith("task_"):
+            # Проверяем, это старая система задач или новая
+            if "_" in data and data.split("_")[1].isdigit():
+                # Старая система (task_0_1)
+                await handle_old_task_callback(query, data, context)
+            else:
+                # Новая система (task_view_1, task_edit_1 и т.д.)
+                await handle_new_task_callback(query, data, context)
+            return
+        
+        # Обработка подтверждений
+        if data.startswith("confirm_") or data.startswith("cancel_"):
+            await handle_confirm_callback(query, data, context)
+            return
+        
+        # Обработка назначения исполнителя
+        if data.startswith("assignee_"):
+            await handle_assignee_callback(query, data, context)
+            return
+        
+        logger.warning(f"Неизвестный формат данных кнопки: {data}")
+        await query.answer("❌ Неизвестная команда")
+        return
         
         # Парсим task_id: формат "task_0_1" -> task_id = "0_1"
         parts = data.split("_")
@@ -857,8 +905,15 @@ def setup_scheduler(app: Application):
         args=[app]
     )
     
+    # 07:50 - кнопки присутствия
+    scheduler.add_job(
+        send_presence_buttons,
+        trigger=CronTrigger(hour=7, minute=50, day_of_week='mon-fri'),
+        args=[app]
+    )
+    
     scheduler.start()
-    logger.info("Расписание настроено: 08:00, 13:00, 16:50 (пн-пт)")
+    logger.info("Расписание настроено: 07:50 (присутствие), 08:00, 13:00, 16:50 (пн-пт)")
 
 
 def main():
