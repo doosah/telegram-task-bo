@@ -586,14 +586,22 @@ async def send_morning_tasks(app, force_weekend=False):
                 # Пропускаем эту задачу
                 continue
             
-            # Валидация текста кнопки (Telegram ограничивает до 64 символов)
-            button_text = f"{i}. {task} ⚪"
-            if len(button_text) > 64:
-                # Укорачиваем текст задачи
-                max_text_len = 64 - len(f"{i}. ⚪")
+            # ОПТИМИЗАЦИЯ ДЛЯ МОБИЛЬНЫХ: ограничиваем длину текста кнопки до 30 символов
+            # Это обеспечит полную видимость на мобильных устройствах
+            max_mobile_length = 30
+            if len(task) > max_mobile_length:
+                # Укорачиваем текст задачи для мобильных
+                task_short = task[:max_mobile_length-3] + "..."
+                button_text = f"{i}. {task_short} ⚪"
+            else:
+                button_text = f"{i}. {task} ⚪"
+            
+            # Дополнительная проверка на случай, если номер задачи делает текст слишком длинным
+            if len(button_text) > 35:  # Оставляем запас
+                max_text_len = 35 - len(f"{i}. ⚪")
                 task_short = task[:max_text_len-3] + "..."
                 button_text = f"{i}. {task_short} ⚪"
-                logger.warning(f"Текст кнопки для задачи {i} укорочен до 64 символов")
+                logger.warning(f"Текст кнопки для задачи {i} укорочен для мобильных: '{button_text}'")
             
             # Добавляем ОДНУ кнопку для этой задачи
             all_buttons.append([
