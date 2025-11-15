@@ -214,15 +214,22 @@ def create_task_keyboard(task_text: str, task_id: str) -> InlineKeyboardMarkup:
         callback_data = f"task_{task_id}"
         logger.warning(f"Укорочен task_id до: {task_id}")
     
-    # Создаем одну кнопку с названием задачи и статусом
-    # Валидация: Telegram ограничивает текст кнопки до 64 символов
-    button_text = f"{task_text} {task_status}"
-    if len(button_text) > 64:
-        # Укорачиваем текст задачи
-        max_text_len = 64 - len(f" {task_status}")
+    # ОПТИМИЗАЦИЯ ДЛЯ МОБИЛЬНЫХ: ограничиваем длину текста кнопки до 30 символов
+    # Это обеспечит полную видимость на мобильных устройствах
+    max_mobile_length = 30
+    if len(task_text) > max_mobile_length:
+        # Укорачиваем текст задачи для мобильных
+        task_text_short = task_text[:max_mobile_length-3] + "..."
+        button_text = f"{task_text_short} {task_status}"
+    else:
+        button_text = f"{task_text} {task_status}"
+    
+    # Дополнительная проверка на случай, если статус делает текст слишком длинным
+    if len(button_text) > 35:  # Оставляем запас
+        max_text_len = 35 - len(f" {task_status}")
         task_text_short = task_text[:max_text_len-3] + "..."
         button_text = f"{task_text_short} {task_status}"
-        logger.warning(f"Текст кнопки укорочен до 64 символов")
+        logger.warning(f"Текст кнопки укорочен для мобильных: '{button_text}'")
     
     buttons = [
         [
@@ -480,7 +487,21 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # Если это кнопка для нашей задачи - обновляем статус
                 if button.callback_data == f"task_{task_id}":
                     # Сохраняем номер задачи в новом тексте
-                    new_text = f"{task_num}. {task_text} {task_status}"
+                    # ОПТИМИЗАЦИЯ ДЛЯ МОБИЛЬНЫХ: ограничиваем длину до 30 символов
+                    max_mobile_length = 30
+                    if len(task_text) > max_mobile_length:
+                        task_text_short = task_text[:max_mobile_length-3] + "..."
+                        new_text = f"{task_num}. {task_text_short} {task_status}"
+                    else:
+                        new_text = f"{task_num}. {task_text} {task_status}"
+                    
+                    # Дополнительная проверка на случай, если номер задачи делает текст слишком длинным
+                    if len(new_text) > 35:  # Оставляем запас
+                        max_text_len = 35 - len(f"{task_num}. {task_status}")
+                        task_text_short = task_text[:max_text_len-3] + "..."
+                        new_text = f"{task_num}. {task_text_short} {task_status}"
+                        logger.warning(f"Текст кнопки укорочен для мобильных: '{new_text}'")
+                    
                     logger.info(f"Обновляем кнопку: '{original_button_text}' → '{new_text}'")
                     new_row.append(InlineKeyboardButton(new_text, callback_data=button.callback_data))
                 else:
