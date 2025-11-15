@@ -276,6 +276,315 @@ async def cancel_create_task(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return -1
 
 
+# ========== РЕДАКТИРОВАНИЕ ЗАДАЧИ ==========
+
+async def start_edit_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Начало редактирования задачи"""
+    try:
+        query = update.callback_query
+        if not query:
+            return -1
+        
+        # Извлекаем task_id из callback_data (формат: task_edit_1)
+        task_id = int(query.data.split("_")[-1])
+        context.user_data['editing_task_id'] = task_id
+        
+        # Получаем задачу из БД
+        from database import Database
+        db = Database()
+        task = db.get_custom_task(task_id)
+        
+        if not task:
+            await query.answer("❌ Задача не найдена", show_alert=True)
+            return -1
+        
+        # Сохраняем текущие данные задачи
+        context.user_data['editing_task'] = {
+            'title': task['title'],
+            'description': task.get('description', ''),
+            'deadline': task.get('deadline', ''),
+            'assignee': task.get('assignee', 'all')
+        }
+        
+        text = (
+            f"✏️ **РЕДАКТИРОВАНИЕ ЗАДАЧИ #{task_id}**\n\n"
+            f"Текущее название: {task['title']}\n\n"
+            f"Введите новое название задачи (или отправьте /skip чтобы оставить текущее):"
+        )
+        
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("⏭️ Оставить текущее", callback_data="skip_edit_title"),
+            InlineKeyboardButton("❌ Отмена", callback_data="cancel_edit_task")
+        ]])
+        
+        await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
+        return EDIT_TITLE
+    except Exception as e:
+        logger.error(f"Ошибка в start_edit_task: {e}", exc_info=True)
+        return -1
+
+
+async def receive_edit_title(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Получение нового названия задачи"""
+    try:
+        title = update.message.text.strip()
+        
+        if len(title) < 3:
+            await update.message.reply_text("❌ Название слишком короткое (минимум 3 символа). Попробуйте снова:")
+            return EDIT_TITLE
+        
+        if len(title) > 100:
+            await update.message.reply_text("❌ Название слишком длинное (максимум 100 символов). Попробуйте снова:")
+            return EDIT_TITLE
+        
+        context.user_data['editing_task']['title'] = title
+        logger.info(f"Новое название задачи: {title}")
+        
+        task_id = context.user_data.get('editing_task_id')
+        current_desc = context.user_data['editing_task'].get('description', '')
+        
+        text = (
+            f"✏️ **РЕДАКТИРОВАНИЕ ЗАДАЧИ #{task_id}**\n\n"
+            f"Текущее описание: {current_desc if current_desc else 'Нет описания'}\n\n"
+            f"Введите новое описание (или отправьте /skip чтобы оставить текущее):"
+        )
+        
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("⏭️ Оставить текущее", callback_data="skip_edit_description"),
+            InlineKeyboardButton("❌ Отмена", callback_data="cancel_edit_task")
+        ]])
+        
+        await update.message.reply_text(text, reply_markup=keyboard, parse_mode='Markdown')
+        return EDIT_DESCRIPTION
+    except Exception as e:
+        logger.error(f"Ошибка в receive_edit_title: {e}", exc_info=True)
+        return -1
+
+
+async def skip_edit_title(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Пропуск редактирования названия"""
+    try:
+        query = update.callback_query
+        task_id = context.user_data.get('editing_task_id')
+        current_desc = context.user_data['editing_task'].get('description', '')
+        
+        text = (
+            f"✏️ **РЕДАКТИРОВАНИЕ ЗАДАЧИ #{task_id}**\n\n"
+            f"Текущее описание: {current_desc if current_desc else 'Нет описания'}\n\n"
+            f"Введите новое описание (или отправьте /skip чтобы оставить текущее):"
+        )
+        
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("⏭️ Оставить текущее", callback_data="skip_edit_description"),
+            InlineKeyboardButton("❌ Отмена", callback_data="cancel_edit_task")
+        ]])
+        
+        await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
+        return EDIT_DESCRIPTION
+    except Exception as e:
+        logger.error(f"Ошибка в skip_edit_title: {e}", exc_info=True)
+        return -1
+
+
+async def receive_edit_description(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Получение нового описания задачи"""
+    try:
+        description = update.message.text.strip()
+        
+        if len(description) > 500:
+            await update.message.reply_text("❌ Описание слишком длинное (максимум 500 символов). Попробуйте снова:")
+            return EDIT_DESCRIPTION
+        
+        context.user_data['editing_task']['description'] = description
+        logger.info(f"Новое описание задачи: {description[:50]}...")
+        
+        task_id = context.user_data.get('editing_task_id')
+        current_deadline = context.user_data['editing_task'].get('deadline', '')
+        
+        text = (
+            f"✏️ **РЕДАКТИРОВАНИЕ ЗАДАЧИ #{task_id}**\n\n"
+            f"Текущий срок: {current_deadline if current_deadline else 'Не указан'}\n\n"
+            f"Введите новый срок в формате ДД.ММ.ГГГГ (или отправьте /skip чтобы оставить текущий):"
+        )
+        
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("⏭️ Оставить текущий", callback_data="skip_edit_deadline"),
+            InlineKeyboardButton("❌ Отмена", callback_data="cancel_edit_task")
+        ]])
+        
+        await update.message.reply_text(text, reply_markup=keyboard, parse_mode='Markdown')
+        return EDIT_DEADLINE
+    except Exception as e:
+        logger.error(f"Ошибка в receive_edit_description: {e}", exc_info=True)
+        return -1
+
+
+async def skip_edit_description(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Пропуск редактирования описания"""
+    try:
+        query = update.callback_query
+        task_id = context.user_data.get('editing_task_id')
+        current_deadline = context.user_data['editing_task'].get('deadline', '')
+        
+        text = (
+            f"✏️ **РЕДАКТИРОВАНИЕ ЗАДАЧИ #{task_id}**\n\n"
+            f"Текущий срок: {current_deadline if current_deadline else 'Не указан'}\n\n"
+            f"Введите новый срок в формате ДД.ММ.ГГГГ (или отправьте /skip чтобы оставить текущий):"
+        )
+        
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("⏭️ Оставить текущий", callback_data="skip_edit_deadline"),
+            InlineKeyboardButton("❌ Отмена", callback_data="cancel_edit_task")
+        ]])
+        
+        await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
+        return EDIT_DEADLINE
+    except Exception as e:
+        logger.error(f"Ошибка в skip_edit_description: {e}", exc_info=True)
+        return -1
+
+
+async def receive_edit_deadline(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Получение нового срока выполнения"""
+    try:
+        deadline_str = update.message.text.strip()
+        
+        # Парсим дату в формате ДД.ММ.ГГГГ
+        try:
+            deadline = datetime.strptime(deadline_str, "%d.%m.%Y")
+            context.user_data['editing_task']['deadline'] = deadline_str
+            logger.info(f"Новый срок выполнения: {deadline_str}")
+        except ValueError:
+            await update.message.reply_text("❌ Неверный формат даты. Используйте ДД.ММ.ГГГГ (например, 25.12.2024):")
+            return EDIT_DEADLINE
+        
+        task_id = context.user_data.get('editing_task_id')
+        
+        text = (
+            f"✏️ **РЕДАКТИРОВАНИЕ ЗАДАЧИ #{task_id}**\n\n"
+            f"Шаг 4/4: Выбор исполнителя\n\n"
+            f"Выберите нового исполнителя задачи:"
+        )
+        
+        await update.message.reply_text(text, reply_markup=get_assignee_menu(), parse_mode='Markdown')
+        return EDIT_ASSIGNEE
+    except Exception as e:
+        logger.error(f"Ошибка в receive_edit_deadline: {e}", exc_info=True)
+        return -1
+
+
+async def skip_edit_deadline(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Пропуск редактирования срока выполнения"""
+    try:
+        query = update.callback_query
+        task_id = context.user_data.get('editing_task_id')
+        
+        text = (
+            f"✏️ **РЕДАКТИРОВАНИЕ ЗАДАЧИ #{task_id}**\n\n"
+            f"Шаг 4/4: Выбор исполнителя\n\n"
+            f"Выберите нового исполнителя задачи:"
+        )
+        
+        await query.edit_message_text(text, reply_markup=get_assignee_menu(), parse_mode='Markdown')
+        return EDIT_ASSIGNEE
+    except Exception as e:
+        logger.error(f"Ошибка в skip_edit_deadline: {e}", exc_info=True)
+        return -1
+
+
+async def receive_edit_assignee(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Получение нового исполнителя и завершение редактирования"""
+    try:
+        assignee = update.callback_query.data.split("_")[1] if update.callback_query else "all"
+        
+        if assignee not in ["AG", "KA", "SA", "all"]:
+            await update.callback_query.answer("❌ Неверный выбор исполнителя")
+            return EDIT_ASSIGNEE
+        
+        context.user_data['editing_task']['assignee'] = assignee
+        
+        # Получаем данные задачи
+        task_id = context.user_data.get('editing_task_id')
+        task_data = context.user_data.get('editing_task', {})
+        
+        # Обновляем задачу в БД
+        from database import Database
+        db = Database()
+        db.update_custom_task(
+            task_id,
+            title=task_data.get('title'),
+            description=task_data.get('description'),
+            deadline=task_data.get('deadline'),
+            assignee=task_data.get('assignee')
+        )
+        
+        assignee_names = {
+            "AG": "АГ",
+            "KA": "КА",
+            "SA": "СА",
+            "all": "Все"
+        }
+        
+        text = (
+            f"✅ **ЗАДАЧА ОБНОВЛЕНА!**\n\n"
+            f"📝 Название: {task_data.get('title')}\n"
+            f"📄 Описание: {task_data.get('description') if task_data.get('description') else 'Нет описания'}\n"
+            f"⏰ Срок: {task_data.get('deadline') if task_data.get('deadline') else 'Не указан'}\n"
+            f"👤 Исполнитель: {assignee_names.get(assignee, assignee)}\n\n"
+            f"ID задачи: #{task_id}"
+        )
+        
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("🔙 К задаче", callback_data=f"task_view_{task_id}")
+        ]])
+        
+        await update.callback_query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
+        await update.callback_query.answer("✅ Задача успешно обновлена!")
+        
+        # Очищаем данные
+        context.user_data.pop('editing_task', None)
+        context.user_data.pop('editing_task_id', None)
+        
+        logger.info(f"Задача #{task_id} обновлена")
+        return -1  # Завершаем диалог
+        
+    except Exception as e:
+        logger.error(f"Ошибка в receive_edit_assignee: {e}", exc_info=True)
+        if update.callback_query:
+            await update.callback_query.answer("❌ Произошла ошибка", show_alert=True)
+        return -1
+
+
+async def cancel_edit_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Отмена редактирования задачи"""
+    try:
+        task_id = context.user_data.pop('editing_task_id', None)
+        context.user_data.pop('editing_task', None)
+        
+        text = "❌ Редактирование задачи отменено."
+        
+        if task_id:
+            keyboard = InlineKeyboardMarkup([[
+                InlineKeyboardButton("🔙 К задаче", callback_data=f"task_view_{task_id}")
+            ]])
+        else:
+            keyboard = InlineKeyboardMarkup([[
+                InlineKeyboardButton("🔙 В главное меню", callback_data="menu_main")
+            ]])
+        
+        if update.callback_query:
+            await update.callback_query.edit_message_text(text, reply_markup=keyboard)
+            await update.callback_query.answer("Редактирование отменено")
+        elif update.message:
+            await update.message.reply_text(text, reply_markup=keyboard)
+        
+        logger.info("Редактирование задачи отменено пользователем")
+        return -1  # Завершаем диалог
+    except Exception as e:
+        logger.error(f"Ошибка в cancel_edit_task: {e}", exc_info=True)
+        return -1
+
+
 # ========== ЗАВЕРШЕНИЕ ЗАДАЧИ С РЕЗУЛЬТАТОМ ==========
 
 async def start_complete_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
