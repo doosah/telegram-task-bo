@@ -175,20 +175,35 @@ async def force_morning_command(update: Update, context: ContextTypes.DEFAULT_TY
 
 
 def create_task_keyboard(task_text: str, task_id: str) -> InlineKeyboardMarkup:
-    """Создает кнопки для задачи (АГ и КА)"""
-    # ВСЕГДА используем дефолтные статусы ⚪ для быстрого создания клавиатуры
-    # Статусы будут обновляться при нажатии на кнопки через button_callback
-    # НЕ обращаемся к БД здесь, чтобы избежать блокировок и зависаний
+    """Создает одну кнопку для задачи"""
+    # Одна кнопка с названием задачи
+    # Статус будет обновляться при нажатии
+    
+    # Получаем статусы из БД (быстро, без блокировок)
+    status_ag = "⚪"
+    status_ka = "⚪"
+    try:
+        status_ag = db.get_task_status(f"{task_id}_AG") or "⚪"
+        status_ka = db.get_task_status(f"{task_id}_KA") or "⚪"
+    except:
+        pass
+    
+    # Определяем общий статус задачи
+    if status_ag == "✅" and status_ka == "✅":
+        task_status = "✅"
+    elif status_ag != "⚪" or status_ka != "⚪":
+        task_status = "⏳"
+    else:
+        task_status = "⚪"
+    
+    # Создаем одну кнопку с названием задачи и статусом
+    button_text = f"{task_text} {task_status}"
     
     buttons = [
         [
             InlineKeyboardButton(
-                "АГ ⚪",
-                callback_data=f"task_{task_id}_AG"
-            ),
-            InlineKeyboardButton(
-                "КА ⚪",
-                callback_data=f"task_{task_id}_KA"
+                button_text,
+                callback_data=f"task_{task_id}"
             )
         ]
     ]
@@ -207,84 +222,115 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     parts = data.split("_")
-    if len(parts) != 3:
+    if len(parts) != 2:
         return
     
     task_id = parts[1]
-    user_initials = parts[2]  # AG или KA
     
     # Получаем пользователя
     user = query.from_user
     user_id = user.id
     username = user.username
     
-    # Определяем, какой пользователь нажал
+    # Определяем, какой пользователь нажал (АГ или КА)
     user_mapping = {
-        "AG": {"username": "alex301182", "initials": "АГ"},
-        "KA": {"username": "Korudirp", "initials": "КА"}
+        "alex301182": {"initials": "AG", "name": "АГ"},
+        "Korudirp": {"initials": "KA", "name": "КА"}
     }
     
-    if user_initials not in user_mapping:
-        await query.answer("❌ Неизвестный пользователь", show_alert=True)
+    # Определяем, кто нажал
+    user_initials = None
+    user_name = None
+    
+    if username in user_mapping:
+        user_initials = user_mapping[username]["initials"]
+        user_name = user_mapping[username]["name"]
+    else:
+        # Проверяем по ID из базы
+        for uname, info in user_mapping.items():
+            saved_id = db.get_user_id_by_username(uname)
+            if saved_id == user_id:
+                user_initials = info["initials"]
+                user_name = info["name"]
+                username = uname
+                break
+    
+    if not user_initials:
+        await query.answer("❌ Вы не в списке участников", show_alert=True)
         return
     
-    expected_username = user_mapping[user_initials]["username"]
-    
-    # Проверяем, что правильный пользователь нажал кнопку
-    # Если у пользователя нет username, проверяем по ID из базы данных
-    if username and username != expected_username:
-        await query.answer(
-            f"❌ Эта кнопка для @{expected_username}",
-            show_alert=True
-        )
-        return
-    
-    # Если username не указан, проверяем по ID из базы
-    if not username:
-        saved_user_id = db.get_user_id_by_username(expected_username)
-        if saved_user_id and user_id != saved_user_id:
-            await query.answer(
-                f"❌ Эта кнопка для @{expected_username}",
-                show_alert=True
-            )
-            return
-    
-    # Сохраняем ID пользователя в базу данных (для отправки напоминаний)
+    # Сохраняем ID пользователя в базу данных
     db.save_user_id(username, user_id, user_initials)
     
-    # Меняем статус: ⚪ → ⏳ → ✅ → ⚪
-    status_key = f"{task_id}_{user_initials}"
-    current_status = db.get_task_status(status_key)
+    # Получаем текущие статусы для АГ и КА
+    status_ag = db.get_task_status(f"{task_id}_AG") or "⚪"
+    status_ka = db.get_task_status(f"{task_id}_KA") or "⚪"
     
+    # Меняем статус для текущего пользователя: ⚪ → ⏳ → ✅
+    status_key = f"{task_id}_{user_initials}"
+    current_status = db.get_task_status(status_key) or "⚪"
+    
+    # Цикл: ⚪ → ⏳ → ✅ → ⚪
     status_cycle = {"⚪": "⏳", "⏳": "✅", "✅": "⚪"}
     new_status = status_cycle.get(current_status, "⚪")
     
-    # Сохраняем в базу данных
+    # Сохраняем новый статус
     db.set_task_status(status_key, new_status)
     
-    # Обновляем сообщение - обновляем только нужную кнопку в большом сообщении
+    # Обновляем статусы после изменения
+    if user_initials == "AG":
+        status_ag = new_status
+    else:
+        status_ka = new_status
+    
+    # Определяем общий статус задачи для отображения
+    if status_ag == "✅" and status_ka == "✅":
+        task_status = "✅"  # Оба выполнили
+    elif status_ag != "⚪" or status_ka != "⚪":
+        task_status = "⏳"  # Кто-то взял в работу
+    else:
+        task_status = "⚪"  # Никто не взял
+    
+    # Обновляем сообщение - обновляем кнопку для этой задачи
     current_markup = query.message.reply_markup
     
     if current_markup and current_markup.inline_keyboard:
+        # Находим текст задачи из сообщения
+        message_text = query.message.text or ""
+        
+        # Ищем задачу в тексте сообщения
+        task_text = ""
+        for line in message_text.split("\n"):
+            if line.strip().startswith(f"{task_id.split('_')[1]}.") or (task_id.isdigit() and line.strip().startswith(f"{task_id}.")):
+                # Извлекаем текст задачи (убираем номер и статус)
+                task_text = line.strip()
+                # Убираем номер задачи
+                if "." in task_text:
+                    task_text = task_text.split(".", 1)[1].strip()
+                # Убираем статусы если есть
+                task_text = task_text.replace("⚪", "").replace("⏳", "").replace("✅", "").strip()
+                break
+        
+        # Если не нашли - используем текст из кнопки
+        if not task_text:
+            button_text = ""
+            for row in current_markup.inline_keyboard:
+                for button in row:
+                    if button.callback_data == f"task_{task_id}":
+                        button_text = button.text
+                        # Убираем статус из текста кнопки
+                        task_text = button_text.replace("⚪", "").replace("⏳", "").replace("✅", "").strip()
+                        break
+        
         # Обновляем кнопки в текущей клавиатуре
         new_keyboard = []
         for row in current_markup.inline_keyboard:
             new_row = []
             for button in row:
                 # Если это кнопка для нашей задачи - обновляем статус
-                if button.callback_data == f"task_{task_id}_{user_initials}":
+                if button.callback_data == f"task_{task_id}":
                     # Обновляем текст кнопки с новым статусом
-                    button_text = button.text
-                    # Заменяем старый статус на новый (формат: "1. АГ ⚪" или "1. КА ⚪")
-                    if "АГ" in button_text:
-                        # Извлекаем номер задачи и добавляем новый статус
-                        task_num = button_text.split(".")[0] if "." in button_text else ""
-                        new_text = f"{task_num}. АГ {new_status}" if task_num else f"АГ {new_status}"
-                    elif "КА" in button_text:
-                        task_num = button_text.split(".")[0] if "." in button_text else ""
-                        new_text = f"{task_num}. КА {new_status}" if task_num else f"КА {new_status}"
-                    else:
-                        new_text = button_text
+                    new_text = f"{task_text} {task_status}"
                     new_row.append(InlineKeyboardButton(new_text, callback_data=button.callback_data))
                 else:
                     new_row.append(button)
@@ -292,13 +338,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         updated_keyboard = InlineKeyboardMarkup(new_keyboard)
         await query.edit_message_reply_markup(reply_markup=updated_keyboard)
-    else:
-        # Если клавиатуры нет или формат другой - создаем новую
-        keyboard = create_task_keyboard("", task_id)
-        await query.edit_message_reply_markup(reply_markup=keyboard)
     
     # Отправляем подтверждение
-    await query.answer(f"✅ Статус изменен: {new_status}", show_alert=False)
+    if task_status == "✅":
+        await query.answer(f"✅ Задача выполнена! ({user_name} и другой участник)", show_alert=False)
+    else:
+        await query.answer(f"⏳ {user_name} взял задачу в работу", show_alert=False)
 
 
 async def send_morning_tasks(app, force_weekend=False):
@@ -342,22 +387,18 @@ async def send_morning_tasks(app, force_weekend=False):
         # Создаем текст сообщения со всеми задачами
         message_text = f"📋 **ЗАДАЧИ НА {day_name.upper()}** ({date_str})\n\n"
         
-        # Создаем кнопки для всех задач
+        # Создаем кнопки для всех задач (ОДНА кнопка на задачу)
         all_buttons = []
         
         for i, task in enumerate(day_tasks, 1):
             task_id = f"{today}_{i}"
-            message_text += f"{i}. {task}\n\n"
+            message_text += f"{i}. {task}\n"
             
-            # Добавляем кнопки для этой задачи
+            # Добавляем ОДНУ кнопку для этой задачи
             all_buttons.append([
                 InlineKeyboardButton(
-                    f"{i}. АГ ⚪",
-                    callback_data=f"task_{task_id}_AG"
-                ),
-                InlineKeyboardButton(
-                    f"{i}. КА ⚪",
-                    callback_data=f"task_{task_id}_KA"
+                    f"{i}. {task} ⚪",
+                    callback_data=f"task_{task_id}"
                 )
             ])
         
