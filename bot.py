@@ -29,9 +29,14 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Получаем данные из переменных окружения (секретные данные)
-BOT_TOKEN = os.getenv('BOT_TOKEN', '8448041977:AAGa4-EZ9dTfn-GgYArZU83FteWfisBOEUo')
-CHAT_ID = os.getenv('CHAT_ID', '-1003107822060')
-ADMIN_USERNAME = os.getenv('ADMIN_USERNAME', 'Doosahyasno')
+# Очищаем от пробелов и невидимых символов
+BOT_TOKEN = os.getenv('BOT_TOKEN', '8448041977:AAGa4-EZ9dTfn-GgYArZU83FteWfisBOEUo').strip()
+CHAT_ID = os.getenv('CHAT_ID', '-1003107822060').strip()
+ADMIN_USERNAME = os.getenv('ADMIN_USERNAME', 'Doosahyasno').strip()
+
+# Проверяем токен на валидность
+if not BOT_TOKEN or len(BOT_TOKEN) < 10:
+    raise ValueError("BOT_TOKEN is invalid or empty!")
 
 # Инициализация базы данных и задач
 db = Database()
