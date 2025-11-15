@@ -94,22 +94,24 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
             await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
         
         elif data == "test_daily_tasks":
-            # Тестовая отправка ежедневных задач - вызываем /force_morning напрямую
+            # Тестовая отправка ежедневных задач - вызываем send_morning_tasks напрямую
             try:
                 await query.answer("⏳ Отправка задач...")
                 
-                # Вызываем функцию send_morning_tasks напрямую
-                if 'send_morning_tasks' in context.bot_data:
-                    send_morning_tasks = context.bot_data['send_morning_tasks']
-                    class AppWrapper:
-                        def __init__(self, bot):
-                            self.bot = bot
-                    app_wrapper = AppWrapper(context.bot)
-                    await send_morning_tasks(app_wrapper, force_weekend=True)
-                    text = "✅ **ЕЖЕДНЕВНЫЕ ЗАДАЧИ**\n\nЗадачи успешно отправлены в группу!"
-                else:
-                    # Если функции нет, отправляем сообщение пользователю
-                    text = "✅ **ЕЖЕДНЕВНЫЕ ЗАДАЧИ**\n\nИспользуйте команду /force_morning для отправки задач."
+                # Импортируем функцию напрямую из bot.py
+                from bot import send_morning_tasks
+                
+                # Создаем обертку для app, как в force_morning_command
+                class AppWrapper:
+                    def __init__(self, bot):
+                        self.bot = bot
+                
+                app_wrapper = AppWrapper(context.bot)
+                
+                # Вызываем функцию напрямую
+                await send_morning_tasks(app_wrapper, force_weekend=True)
+                
+                text = "✅ **ЕЖЕДНЕВНЫЕ ЗАДАЧИ**\n\nЗадачи успешно отправлены в группу!"
                 
                 keyboard = InlineKeyboardMarkup([[
                     InlineKeyboardButton("🔙 К тестированию", callback_data="menu_testing")
@@ -131,17 +133,20 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
             try:
                 await query.answer("⏳ Отправка кнопок...")
                 
-                # Вызываем функцию send_presence_buttons напрямую
-                if 'send_presence_buttons' in context.bot_data:
-                    send_presence_buttons = context.bot_data['send_presence_buttons']
-                    class AppWrapper:
-                        def __init__(self, bot):
-                            self.bot = bot
-                    app_wrapper = AppWrapper(context.bot)
-                    await send_presence_buttons(app_wrapper)
-                    text = "✅ **КОНТРОЛЬ СОТРУДНИКОВ**\n\nКнопки 'На рабочем месте' и 'Опаздываю' отправлены в группу!"
-                else:
-                    text = "✅ **КОНТРОЛЬ СОТРУДНИКОВ**\n\nКнопки будут отправлены автоматически в 07:50."
+                # Импортируем функцию напрямую из bot.py
+                from bot import send_presence_buttons
+                
+                # Создаем обертку для app
+                class AppWrapper:
+                    def __init__(self, bot):
+                        self.bot = bot
+                
+                app_wrapper = AppWrapper(context.bot)
+                
+                # Вызываем функцию напрямую
+                await send_presence_buttons(app_wrapper)
+                
+                text = "✅ **КОНТРОЛЬ СОТРУДНИКОВ**\n\nКнопки 'На рабочем месте' и 'Опаздываю' отправлены в группу!"
                 
                 keyboard = InlineKeyboardMarkup([[
                     InlineKeyboardButton("🔙 К тестированию", callback_data="menu_testing")
