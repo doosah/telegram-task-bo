@@ -238,13 +238,23 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         task_id = parts[1]
         logger.info(f"Обработка задачи: {task_id}")
         
-        await query.answer()
-        
         # Получаем пользователя
-        user = query.from_user
-        user_id = user.id
-        username = user.username
-        logger.info(f"Пользователь: @{username} (ID: {user_id})")
+        try:
+            user = query.from_user
+            if not user:
+                logger.error("query.from_user is None")
+                await query.answer("❌ Ошибка: пользователь не найден", show_alert=True)
+                return
+            
+            user_id = user.id
+            username = user.username
+            logger.info(f"Пользователь: @{username} (ID: {user_id})")
+        except Exception as e:
+            logger.error(f"Ошибка получения пользователя: {e}", exc_info=True)
+            await query.answer("❌ Ошибка получения данных пользователя", show_alert=True)
+            return
+        
+        await query.answer()
         
         # Определяем, какой пользователь нажал (АГ, КА или СА)
         user_mapping = {
