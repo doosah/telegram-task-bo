@@ -34,8 +34,8 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
         elif data == "menu_create_task":
             # ConversationHandler обработает это через entry_points
             # НЕ обрабатываем здесь, чтобы ConversationHandler мог перехватить
-            # Просто не делаем ничего - ConversationHandler сам обработает
-            pass
+            # Возвращаемся без обработки - ConversationHandler сам обработает
+            return
         
         elif data == "menu_view_tasks":
             from menu import get_tasks_menu, get_main_menu
@@ -95,6 +95,8 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
         
         elif data == "test_daily_tasks":
             # Тестовая отправка ежедневных задач
+            await query.answer("⏳ Отправка задач...")
+            
             # Используем функции из bot_data, если они там есть
             if 'send_morning_tasks' in context.bot_data:
                 send_morning_tasks = context.bot_data['send_morning_tasks']
@@ -104,12 +106,10 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
                 app_wrapper = AppWrapper(context.bot)
                 try:
                     await send_morning_tasks(app_wrapper, force_weekend=True)
-                    await query.answer("✅ Ежедневные задачи отправлены в группу!")
                     text = "✅ **ЕЖЕДНЕВНЫЕ ЗАДАЧИ**\n\nЗадачи успешно отправлены в группу!"
                 except Exception as e:
                     logger.error(f"Ошибка отправки ежедневных задач: {e}", exc_info=True)
-                    await query.answer("❌ Ошибка отправки задач", show_alert=True)
-                    text = f"❌ **ОШИБКА**\n\nНе удалось отправить задачи: {e}"
+                    text = f"❌ **ОШИБКА**\n\nНе удалось отправить задачи:\n{str(e)[:200]}"
             else:
                 # Если функции нет в bot_data, используем команду /force_morning
                 text = "✅ **ЕЖЕДНЕВНЫЕ ЗАДАЧИ**\n\nИспользуйте команду /force_morning для отправки задач."
@@ -121,6 +121,8 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
         
         elif data == "test_employees":
             # Контроль сотрудников - отправка кнопок присутствия (как в 07:50)
+            await query.answer("⏳ Отправка кнопок...")
+            
             if 'send_presence_buttons' in context.bot_data:
                 send_presence_buttons = context.bot_data['send_presence_buttons']
                 class AppWrapper:
@@ -129,12 +131,10 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
                 app_wrapper = AppWrapper(context.bot)
                 try:
                     await send_presence_buttons(app_wrapper)
-                    await query.answer("✅ Кнопки присутствия отправлены в группу!")
                     text = "✅ **КОНТРОЛЬ СОТРУДНИКОВ**\n\nКнопки 'На рабочем месте' и 'Опаздываю' отправлены в группу!"
                 except Exception as e:
                     logger.error(f"Ошибка отправки кнопок присутствия: {e}", exc_info=True)
-                    await query.answer("❌ Ошибка отправки кнопок", show_alert=True)
-                    text = f"❌ **ОШИБКА**\n\nНе удалось отправить кнопки: {e}"
+                    text = f"❌ **ОШИБКА**\n\nНе удалось отправить кнопки:\n{str(e)[:200]}"
             else:
                 text = "✅ **КОНТРОЛЬ СОТРУДНИКОВ**\n\nКнопки будут отправлены автоматически в 07:50."
             

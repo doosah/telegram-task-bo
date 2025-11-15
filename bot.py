@@ -97,6 +97,65 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
 
 
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /help - список всех доступных команд"""
+    try:
+        user = update.effective_user
+        is_admin = user.username == ADMIN_USERNAME if user.username else False
+        
+        text = "📋 **ДОСТУПНЫЕ КОМАНДЫ**\n\n"
+        
+        text += "**Для всех:**\n"
+        text += "/start - Главное меню бота\n"
+        text += "/help - Список команд (это сообщение)\n"
+        text += "/cancel - Отменить текущее действие\n\n"
+        
+        if is_admin:
+            text += "**Только для администратора:**\n"
+            text += "/force_morning - Отправить ежедневные задачи сейчас\n"
+            text += "/add_urgent ТЕКСТ - Добавить срочную задачу в группу\n\n"
+        
+        text += "**Меню бота:**\n"
+        text += "📝 Создать задачу - Создать новую задачу\n"
+        text += "🧪 Тестирование - Тестовые функции\n"
+        text += "❓ Помощь - Справка по использованию\n\n"
+        
+        text += "**Примечание:**\n"
+        text += "Используйте /cancel для отмены любого действия"
+        
+        await update.message.reply_text(text, parse_mode='Markdown')
+        logger.info(f"Команда /help выполнена пользователем @{user.username}")
+    except Exception as e:
+        logger.error(f"Ошибка в help_command: {e}", exc_info=True)
+        try:
+            await update.message.reply_text(f"❌ Ошибка: {e}")
+        except:
+            pass
+
+
+async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /cancel - отмена текущего действия"""
+    try:
+        user = update.effective_user
+        
+        # Очищаем все данные пользователя
+        context.user_data.clear()
+        
+        text = "❌ **ОТМЕНА**\n\nВсе действия отменены. Вы можете начать заново."
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("🔙 В главное меню", callback_data="menu_main")
+        ]])
+        
+        await update.message.reply_text(text, reply_markup=keyboard, parse_mode='Markdown')
+        logger.info(f"Команда /cancel выполнена пользователем @{user.username}")
+    except Exception as e:
+        logger.error(f"Ошибка в cancel_command: {e}", exc_info=True)
+        try:
+            await update.message.reply_text("❌ Ошибка при отмене")
+        except:
+            pass
+
+
 async def add_urgent_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /add_urgent - добавить внеплановую задачу"""
     try:
@@ -270,8 +329,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.answer()
             return
         
-        # Обработка меню
-        if data.startswith("menu_"):
+        # Обработка меню (кроме menu_create_task - его обрабатывает ConversationHandler)
+        if data.startswith("menu_") and data != "menu_create_task":
             await handle_menu_callback(query, data, context, db)
             return
         
@@ -693,6 +752,10 @@ def main():
         application.bot_data['db'] = db
         logger.info("Глобальный экземпляр db сохранен в bot_data")
         
+        # Сохраняем CHAT_ID для использования в ConversationHandlers
+        application.bot_data['CHAT_ID'] = CHAT_ID
+        logger.info("CHAT_ID сохранен в bot_data")
+        
         # Сохраняем функции для тестирования
         application.bot_data['send_morning_tasks'] = send_morning_tasks
         application.bot_data['send_presence_buttons'] = send_presence_buttons
@@ -701,6 +764,12 @@ def main():
         # Регистрируем обработчики команд
         application.add_handler(CommandHandler("start", start_command))
         logger.info("Обработчик /start зарегистрирован")
+        
+        application.add_handler(CommandHandler("help", help_command))
+        logger.info("Обработчик /help зарегистрирован")
+        
+        application.add_handler(CommandHandler("cancel", cancel_command))
+        logger.info("Обработчик /cancel зарегистрирован")
         
         application.add_handler(CommandHandler("add_urgent", add_urgent_command))
         logger.info("Обработчик /add_urgent зарегистрирован")

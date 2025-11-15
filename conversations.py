@@ -26,7 +26,7 @@ async def start_create_task(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         
         text = (
             "📝 **СОЗДАНИЕ НОВОЙ ЗАДАЧИ**\n\n"
-            "Шаг 1/4: Название задачи\n\n"
+            "Шаг 1/5: Название задачи\n\n"
             "Введите название задачи:"
         )
         
@@ -321,6 +321,48 @@ async def finish_create_task(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 await update.callback_query.answer("✅ Задача успешно создана!")
             elif update.message:
                 await update.message.reply_text(text, reply_markup=keyboard, parse_mode='Markdown')
+            
+            # Отправляем задачу в группу
+            try:
+                chat_id = context.bot_data.get('CHAT_ID')
+                if not chat_id:
+                    # Пытаемся получить из переменных окружения
+                    import os
+                    chat_id = os.getenv('CHAT_ID', '').strip()
+                
+                if chat_id:
+                    chat_id = int(chat_id) if isinstance(chat_id, str) else chat_id
+                    
+                    # Формируем сообщение для группы
+                    group_text = (
+                        f"📋 **НОВАЯ ЗАДАЧА #{task_id}**\n\n"
+                        f"📝 **{title}**\n"
+                        f"📄 {description if description else 'Без описания'}\n"
+                        f"⏰ Срок: {deadline if deadline else 'Не указан'}\n"
+                        f"👤 Исполнитель: {assignee_names.get(assignee, assignee)}\n"
+                        f"👨‍💼 Создатель: @{creator}"
+                    )
+                    
+                    # Отправляем в группу
+                    if photo:
+                        # Если есть фото, отправляем с фото
+                        await context.bot.send_photo(
+                            chat_id=chat_id,
+                            photo=photo,
+                            caption=group_text,
+                            parse_mode='Markdown'
+                        )
+                    else:
+                        # Если нет фото, отправляем просто текст
+                        await context.bot.send_message(
+                            chat_id=chat_id,
+                            text=group_text,
+                            parse_mode='Markdown'
+                        )
+                    logger.info(f"Задача #{task_id} отправлена в группу {chat_id}")
+            except Exception as e:
+                logger.error(f"Ошибка отправки задачи в группу: {e}", exc_info=True)
+                # Не прерываем процесс, просто логируем ошибку
             
             # Очищаем данные
             context.user_data.pop('creating_task', None)
