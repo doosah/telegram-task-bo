@@ -95,9 +95,9 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
         
         elif data == "test_daily_tasks":
             # Тестовая отправка ежедневных задач - вызываем /force_morning напрямую
-            await query.answer("⏳ Отправка задач...")
-            
             try:
+                await query.answer("⏳ Отправка задач...")
+                
                 # Вызываем функцию send_morning_tasks напрямую
                 if 'send_morning_tasks' in context.bot_data:
                     send_morning_tasks = context.bot_data['send_morning_tasks']
@@ -110,20 +110,27 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
                 else:
                     # Если функции нет, отправляем сообщение пользователю
                     text = "✅ **ЕЖЕДНЕВНЫЕ ЗАДАЧИ**\n\nИспользуйте команду /force_morning для отправки задач."
+                
+                keyboard = InlineKeyboardMarkup([[
+                    InlineKeyboardButton("🔙 К тестированию", callback_data="menu_testing")
+                ]])
+                await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
             except Exception as e:
                 logger.error(f"Ошибка отправки ежедневных задач: {e}", exc_info=True)
-                text = f"❌ **ОШИБКА**\n\nНе удалось отправить задачи:\n{str(e)[:200]}"
-            
-            keyboard = InlineKeyboardMarkup([[
-                InlineKeyboardButton("🔙 К тестированию", callback_data="menu_testing")
-            ]])
-            await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
+                try:
+                    text = f"❌ **ОШИБКА**\n\nНе удалось отправить задачи:\n{str(e)[:200]}"
+                    keyboard = InlineKeyboardMarkup([[
+                        InlineKeyboardButton("🔙 К тестированию", callback_data="menu_testing")
+                    ]])
+                    await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
+                except:
+                    await query.answer(f"❌ Ошибка: {str(e)[:100]}", show_alert=True)
         
         elif data == "test_employees":
             # Контроль сотрудников - отправка кнопок присутствия (как в 07:50)
-            await query.answer("⏳ Отправка кнопок...")
-            
             try:
+                await query.answer("⏳ Отправка кнопок...")
+                
                 # Вызываем функцию send_presence_buttons напрямую
                 if 'send_presence_buttons' in context.bot_data:
                     send_presence_buttons = context.bot_data['send_presence_buttons']
@@ -135,14 +142,21 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
                     text = "✅ **КОНТРОЛЬ СОТРУДНИКОВ**\n\nКнопки 'На рабочем месте' и 'Опаздываю' отправлены в группу!"
                 else:
                     text = "✅ **КОНТРОЛЬ СОТРУДНИКОВ**\n\nКнопки будут отправлены автоматически в 07:50."
+                
+                keyboard = InlineKeyboardMarkup([[
+                    InlineKeyboardButton("🔙 К тестированию", callback_data="menu_testing")
+                ]])
+                await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
             except Exception as e:
                 logger.error(f"Ошибка отправки кнопок присутствия: {e}", exc_info=True)
-                text = f"❌ **ОШИБКА**\n\nНе удалось отправить кнопки:\n{str(e)[:200]}"
-            
-            keyboard = InlineKeyboardMarkup([[
-                InlineKeyboardButton("🔙 К тестированию", callback_data="menu_testing")
-            ]])
-            await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
+                try:
+                    text = f"❌ **ОШИБКА**\n\nНе удалось отправить кнопки:\n{str(e)[:200]}"
+                    keyboard = InlineKeyboardMarkup([[
+                        InlineKeyboardButton("🔙 К тестированию", callback_data="menu_testing")
+                    ]])
+                    await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
+                except:
+                    await query.answer(f"❌ Ошибка: {str(e)[:100]}", show_alert=True)
         
     except Exception as e:
         logger.error(f"Ошибка в handle_menu_callback: {e}", exc_info=True)

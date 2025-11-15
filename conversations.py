@@ -93,17 +93,14 @@ async def receive_description(update: Update, context: ContextTypes.DEFAULT_TYPE
         
         text = (
             "📝 **СОЗДАНИЕ НОВОЙ ЗАДАЧИ**\n\n"
-            "Шаг 3/4: Срок выполнения\n\n"
-            "Введите срок выполнения в формате ДД.ММ.ГГГГ (например, 25.12.2024)\n"
-            "Или отправьте /skip для пропуска:"
+            "Шаг 3/5: Выбор исполнителя\n\n"
+            "Выберите исполнителя задачи:"
         )
         
-        keyboard = InlineKeyboardMarkup([[
-            InlineKeyboardButton("⏭️ Пропустить", callback_data="skip_deadline")
-        ]])
+        keyboard = get_assignee_menu()
         
         await update.message.reply_text(text, reply_markup=keyboard, parse_mode='Markdown')
-        return DEADLINE
+        return ASSIGNEE
     except Exception as e:
         logger.error(f"Ошибка в receive_description: {e}", exc_info=True)
         return -1
