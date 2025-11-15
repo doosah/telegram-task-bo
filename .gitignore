@@ -1,0 +1,34 @@
+# Файлы Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Виртуальное окружение
+venv/
+env/
+ENV/
+
+# База данных
+*.db
+*.sqlite
+*.sqlite3
+bot_database.db
+
+# Переменные окружения
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Логи
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
