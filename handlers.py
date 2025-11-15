@@ -208,25 +208,31 @@ async def handle_presence_callback(query, data: str, context: ContextTypes.DEFAU
             time_str = datetime.now().strftime("%H:%M")
             db.save_presence(username, user_id, "here", time=time_str)
             
-            # Отправляем ответ в личные сообщения боту, а не редактируем сообщение в группе
+            # Отправляем уведомление администратору
             try:
-                # Проверяем, это сообщение из группы или личное
-                if query.message and query.message.chat.type in ['group', 'supergroup']:
-                    # Это группа - отправляем ответ в личные сообщения
-                    text = f"✅ **@{username}** на рабочем месте\n⏰ Время: {time_str}"
+                # Получаем admin_id
+                admin_id = None
+                if 'admin_id' in context.bot_data:
+                    admin_id = context.bot_data['admin_id']
+                else:
+                    # Пытаемся получить из БД
+                    from bot import ADMIN_USERNAME
+                    admin_id = db.get_user_id_by_username(ADMIN_USERNAME)
+                    if admin_id:
+                        context.bot_data['admin_id'] = admin_id
+                
+                if admin_id:
+                    text = f"✅ **ПРИБЫТИЕ**\n\n👤 Логин: @{username}\n⏰ Время: {time_str}\n📍 Статус: На рабочем месте"
                     await context.bot.send_message(
-                        chat_id=user_id,
+                        chat_id=admin_id,
                         text=text,
                         parse_mode='Markdown'
                     )
-                    await query.answer("✅ Отметка сохранена! Ответ отправлен в личные сообщения.")
-                else:
-                    # Это личное сообщение - редактируем
-                    text = f"✅ **@{username}** на рабочем месте\n⏰ Время: {time_str}"
-                    await query.edit_message_text(text, parse_mode='Markdown')
-                    await query.answer("✅ Отметка сохранена!")
+                    logger.info(f"Уведомление о прибытии отправлено администратору {admin_id}")
+                
+                await query.answer("✅ Отметка сохранена!")
             except Exception as e:
-                logger.error(f"Ошибка отправки ответа в личные сообщения: {e}", exc_info=True)
+                logger.error(f"Ошибка отправки уведомления администратору: {e}", exc_info=True)
                 await query.answer("✅ Отметка сохранена!")
         
         elif data == "presence_late":

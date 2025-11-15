@@ -1322,8 +1322,51 @@ async def receive_work_photo(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
         
         task = db.get_custom_task(task_id)
+        user = update.effective_user
+        username = user.username if user.username else f"user_{user.id}"
         
-        # Отправляем уведомление в бота (не в чат)
+        # Отправляем уведомление администратору с результатом и материалами
+        try:
+            # Получаем admin_id
+            admin_id = None
+            if 'admin_id' in context.bot_data:
+                admin_id = context.bot_data['admin_id']
+            else:
+                # Пытаемся получить из БД
+                from bot import ADMIN_USERNAME
+                admin_id = db.get_user_id_by_username(ADMIN_USERNAME)
+                if admin_id:
+                    context.bot_data['admin_id'] = admin_id
+            
+            if admin_id:
+                admin_text = (
+                    f"✅ **ЗАДАЧА ЗАВЕРШЕНА**\n\n"
+                    f"📝 Задача: {task['title']}\n"
+                    f"👤 Исполнитель: @{username}\n"
+                    f"📄 Описание работы: {result_text}\n"
+                    f"📸 Материалы: {'Прикреплены' if photo_file_id else 'Не прикреплены'}\n\n"
+                    f"ID задачи: #{task_id}"
+                )
+                
+                # Если есть фото, отправляем его администратору
+                if photo_file_id:
+                    await context.bot.send_photo(
+                        chat_id=admin_id,
+                        photo=photo_file_id,
+                        caption=admin_text,
+                        parse_mode='Markdown'
+                    )
+                else:
+                    await context.bot.send_message(
+                        chat_id=admin_id,
+                        text=admin_text,
+                        parse_mode='Markdown'
+                    )
+                logger.info(f"Уведомление о завершении задачи #{task_id} отправлено администратору {admin_id}")
+        except Exception as e:
+            logger.error(f"Ошибка отправки уведомления администратору: {e}", exc_info=True)
+        
+        # Отправляем подтверждение пользователю
         text = (
             f"✅ **ЗАДАЧА ЗАВЕРШЕНА!**\n\n"
             f"📝 Задача: {task['title']}\n"
@@ -1336,15 +1379,13 @@ async def receive_work_photo(update: Update, context: ContextTypes.DEFAULT_TYPE)
             InlineKeyboardButton("🔙 В главное меню", callback_data="menu_main")
         ]])
         
-        # Отправляем ответ в личные сообщения пользователю (не в группу)
-        user = update.effective_user
         user_id = user.id if user else None
         
         if not user_id:
             logger.error("Не удалось получить user_id для отправки ответа")
             return -1
         
-        # Если есть фото, отправляем его вместе с текстом в личные сообщения
+        # Если есть фото, отправляем его вместе с текстом в личные сообщения пользователю
         if photo_file_id:
             await context.bot.send_photo(
                 chat_id=user_id,
@@ -1400,7 +1441,40 @@ async def skip_work_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         )
         
         task = db.get_custom_task(task_id)
+        user = query.from_user
+        username = user.username if user.username else f"user_{user.id}"
         
+        # Отправляем уведомление администратору с результатом
+        try:
+            # Получаем admin_id
+            admin_id = None
+            if 'admin_id' in context.bot_data:
+                admin_id = context.bot_data['admin_id']
+            else:
+                # Пытаемся получить из БД
+                from bot import ADMIN_USERNAME
+                admin_id = db.get_user_id_by_username(ADMIN_USERNAME)
+                if admin_id:
+                    context.bot_data['admin_id'] = admin_id
+            
+            if admin_id:
+                admin_text = (
+                    f"✅ **ЗАДАЧА ЗАВЕРШЕНА**\n\n"
+                    f"📝 Задача: {task['title']}\n"
+                    f"👤 Исполнитель: @{username}\n"
+                    f"📄 Описание работы: {result_text}\n\n"
+                    f"ID задачи: #{task_id}"
+                )
+                await context.bot.send_message(
+                    chat_id=admin_id,
+                    text=admin_text,
+                    parse_mode='Markdown'
+                )
+                logger.info(f"Уведомление о завершении задачи #{task_id} отправлено администратору {admin_id}")
+        except Exception as e:
+            logger.error(f"Ошибка отправки уведомления администратору: {e}", exc_info=True)
+        
+        # Отправляем подтверждение пользователю
         text = (
             f"✅ **ЗАДАЧА ЗАВЕРШЕНА!**\n\n"
             f"📝 Задача: {task['title']}\n"
@@ -1413,7 +1487,6 @@ async def skip_work_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         ]])
         
         # Отправляем ответ в личные сообщения пользователю (не в группу)
-        user = query.from_user
         user_id = user.id if user else None
         
         if user_id:

@@ -338,14 +338,42 @@ async def handle_delay_reason(update: Update, context: ContextTypes.DEFAULT_TYPE
         time_str = datetime.now().strftime("%H:%M")
         db.save_presence(username, user_id, "late", time=time_str, delay_minutes=delay_minutes, reason=reason)
         
-        # Отправляем подтверждение в личные сообщения
+        # Отправляем уведомление администратору
+        try:
+            # Получаем admin_id
+            admin_id = None
+            if 'admin_id' in context.bot_data:
+                admin_id = context.bot_data['admin_id']
+            else:
+                # Пытаемся получить из БД
+                admin_id = db.get_user_id_by_username(ADMIN_USERNAME)
+                if admin_id:
+                    context.bot_data['admin_id'] = admin_id
+            
+            if admin_id:
+                text = (
+                    f"⏰ **ОПОЗДАНИЕ**\n\n"
+                    f"👤 Логин: @{username}\n"
+                    f"⏰ Время опоздания: {hour}ч {minute}м\n"
+                    f"📝 Причина: {reason}\n"
+                    f"🕐 Время отметки: {time_str}"
+                )
+                await context.bot.send_message(
+                    chat_id=admin_id,
+                    text=text,
+                    parse_mode='Markdown'
+                )
+                logger.info(f"Уведомление об опоздании отправлено администратору {admin_id}")
+        except Exception as e:
+            logger.error(f"Ошибка отправки уведомления администратору: {e}", exc_info=True)
+        
+        # Отправляем подтверждение пользователю
         text = (
             f"✅ **ОПОЗДАНИЕ ЗАФИКСИРОВАНО**\n\n"
             f"⏰ Время опоздания: {hour}ч {minute}м\n"
             f"📝 Причина: {reason}\n"
             f"🕐 Время отметки: {time_str}"
         )
-        
         await update.message.reply_text(text, parse_mode='Markdown')
         
         # Очищаем данные
