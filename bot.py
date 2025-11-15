@@ -350,6 +350,10 @@ async def add_urgent_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def force_morning_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /force_morning - отправить задачи прямо сейчас"""
     try:
+        # Проверка на спам перед обработкой
+        if await spam_filter(update, context):
+            return  # Блокируем спам
+        
         user = update.effective_user
         if not user:
             logger.error("user is None in force_morning_command")
@@ -1003,6 +1007,20 @@ def main():
         
         application.add_handler(CommandHandler("force_morning", force_morning_command))
         logger.info("Обработчик /force_morning зарегистрирован")
+        
+        # Регистрируем глобальный фильтр спама для всех текстовых сообщений
+        async def global_spam_filter(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            """Глобальный фильтр спама для всех сообщений"""
+            if await spam_filter(update, context):
+                # Если это спам, не обрабатываем дальше
+                return
+        
+        # Регистрируем фильтр спама ПЕРЕД всеми обработчиками (группа 0 - самый высокий приоритет)
+        application.add_handler(MessageHandler(
+            filters.TEXT & ~filters.COMMAND,
+            global_spam_filter
+        ), group=0)
+        logger.info("Глобальный фильтр спама зарегистрирован")
         
         # Регистрируем обработчик причины опоздания (должен быть ДО ConversationHandlers)
         # Этот обработчик будет перехватывать текстовые сообщения, когда пользователь вводит причину опоздания
