@@ -262,10 +262,40 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Сохраняем в базу данных
     db.set_task_status(status_key, new_status)
     
-    # Обновляем сообщение
-    keyboard = create_task_keyboard("", task_id)
+    # Обновляем сообщение - обновляем только нужную кнопку в большом сообщении
+    current_markup = query.message.reply_markup
     
-    await query.edit_message_reply_markup(reply_markup=keyboard)
+    if current_markup and current_markup.inline_keyboard:
+        # Обновляем кнопки в текущей клавиатуре
+        new_keyboard = []
+        for row in current_markup.inline_keyboard:
+            new_row = []
+            for button in row:
+                # Если это кнопка для нашей задачи - обновляем статус
+                if button.callback_data == f"task_{task_id}_{user_initials}":
+                    # Обновляем текст кнопки с новым статусом
+                    button_text = button.text
+                    # Заменяем старый статус на новый (формат: "1. АГ ⚪" или "1. КА ⚪")
+                    if "АГ" in button_text:
+                        # Извлекаем номер задачи и добавляем новый статус
+                        task_num = button_text.split(".")[0] if "." in button_text else ""
+                        new_text = f"{task_num}. АГ {new_status}" if task_num else f"АГ {new_status}"
+                    elif "КА" in button_text:
+                        task_num = button_text.split(".")[0] if "." in button_text else ""
+                        new_text = f"{task_num}. КА {new_status}" if task_num else f"КА {new_status}"
+                    else:
+                        new_text = button_text
+                    new_row.append(InlineKeyboardButton(new_text, callback_data=button.callback_data))
+                else:
+                    new_row.append(button)
+            new_keyboard.append(new_row)
+        
+        updated_keyboard = InlineKeyboardMarkup(new_keyboard)
+        await query.edit_message_reply_markup(reply_markup=updated_keyboard)
+    else:
+        # Если клавиатуры нет или формат другой - создаем новую
+        keyboard = create_task_keyboard("", task_id)
+        await query.edit_message_reply_markup(reply_markup=keyboard)
     
     # Отправляем подтверждение
     await query.answer(f"✅ Статус изменен: {new_status}", show_alert=False)
