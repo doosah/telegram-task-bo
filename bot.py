@@ -334,6 +334,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await handle_menu_callback(query, data, context, db)
             return
         
+        # Обработка тестирования (test_daily_tasks, test_employees)
+        if data.startswith("test_"):
+            await handle_menu_callback(query, data, context, db)
+            return
+        
         # Обработка присутствия
         if data.startswith("presence_"):
             await handle_presence_callback(query, data, context, db)

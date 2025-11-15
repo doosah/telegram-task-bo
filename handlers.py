@@ -29,7 +29,12 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
                 "👋 **ГЛАВНОЕ МЕНЮ**\n\n"
                 "Выберите действие:"
             )
-            await query.edit_message_text(text, reply_markup=get_main_menu(), parse_mode='Markdown')
+            try:
+                await query.edit_message_text(text, reply_markup=get_main_menu(), parse_mode='Markdown')
+            except Exception as edit_error:
+                # Если не удалось отредактировать (например, сообщение с фото), отправляем новое
+                logger.warning(f"Не удалось отредактировать сообщение, отправляем новое: {edit_error}")
+                await query.message.reply_text(text, reply_markup=get_main_menu(), parse_mode='Markdown')
         
         elif data == "menu_create_task":
             # ConversationHandler обработает это через entry_points
