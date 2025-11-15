@@ -1157,31 +1157,8 @@ def main():
         application.add_handler(complete_task_conv)
         logger.info("ConversationHandler для завершения задач зарегистрирован")
         
-        # Регистрируем ConversationHandler для работы с задачей (Взять в работу)
-        work_task_conv = ConversationHandler(
-            entry_points=[
-                CallbackQueryHandler(start_work_task, pattern="^work_task_[0-9]+_(AG|KA|SA)$"),
-                CallbackQueryHandler(work_done_button, pattern="^work_done$")
-            ],
-            states={
-                WORK_RESULT: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, receive_work_result),
-                    CallbackQueryHandler(skip_work_result, pattern="^skip_work_result$")
-                ],
-                WORK_PHOTO: [
-                    MessageHandler(filters.PHOTO | filters.VIDEO | filters.Document.ALL, receive_work_photo),
-                    CallbackQueryHandler(skip_work_photo, pattern="^skip_work_photo$")
-                ]
-            },
-            fallbacks=[
-                CallbackQueryHandler(cancel_work_task, pattern="^cancel_work_task$"),
-                CommandHandler("cancel", cancel_work_task)
-            ],
-            name="work_task_conversation"
-        )
-        
-        application.add_handler(work_task_conv)
-        logger.info("ConversationHandler для работы с задачей зарегистрирован")
+        # Убрали ConversationHandler для работы с задачей - теперь используем простые кнопки
+        # Обработчики handle_work_task_take и handle_work_task_done зарегистрированы через button_callback
         
         # Регистрируем обработчик кнопок ПОСЛЕ всех ConversationHandlers
         # чтобы ConversationHandlers могли перехватить свои callback_data
