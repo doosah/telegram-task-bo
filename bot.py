@@ -229,13 +229,15 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.answer()
             return
         
+        # Парсим task_id: формат "task_0_1" -> task_id = "0_1"
         parts = data.split("_")
-        if len(parts) != 2:
+        if len(parts) < 3:  # минимум: ["task", "0", "1"]
             logger.warning(f"Неверный формат task_id: {data}, parts={parts}")
             await query.answer()
             return
         
-        task_id = parts[1]
+        # task_id = все части после "task" (например, "0_1" из "task_0_1")
+        task_id = "_".join(parts[1:])
         logger.info(f"Обработка задачи: {task_id}")
         
         # Получаем пользователя
