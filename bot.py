@@ -279,6 +279,10 @@ async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def add_urgent_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /add_urgent - добавить внеплановую задачу"""
     try:
+        # Проверка на спам перед обработкой
+        if await spam_filter(update, context):
+            return  # Блокируем спам
+        
         user = update.effective_user
         if not user:
             logger.error("user is None in add_urgent_command")
