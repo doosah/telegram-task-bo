@@ -241,7 +241,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.answer("❌ Ошибка получения данных пользователя", show_alert=True)
             return
         
-        await query.answer()
+        # Отвечаем на callback сразу, чтобы Telegram знал, что запрос обработан
+        try:
+            await query.answer()
+        except Exception as e:
+            logger.warning(f"Не удалось отправить answer: {e}")
+            # Продолжаем работу, даже если answer не отправился
         
         # Определяем, какой пользователь нажал (АГ, КА или СА)
         user_mapping = {
@@ -272,7 +277,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         if not user_initials:
             logger.warning(f"Пользователь @{username} (ID: {user_id}) не в списке участников")
-            await query.answer("❌ Вы не в списке участников", show_alert=True)
+            try:
+                await query.answer("❌ Вы не в списке участников", show_alert=True)
+            except:
+                pass
             return
         
         # Сохраняем ID пользователя в базу данных
@@ -296,7 +304,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Меняем статус для текущего пользователя: ⚪ → ⏳ → ✅
         status_key = f"{task_id}_{user_initials}"
-        current_status = db.get_task_status(status_key) or "⚪"
+        try:
+            current_status = db.get_task_status(status_key) or "⚪"
+        except Exception as e:
+            logger.error(f"Ошибка получения текущего статуса: {e}", exc_info=True)
+            current_status = "⚪"
         
         # Цикл: ⚪ → ⏳ → ✅ → ⚪
         status_cycle = {"⚪": "⏳", "⏳": "✅", "✅": "⚪"}
@@ -304,7 +316,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.info(f"Статус {user_initials}: {current_status} → {new_status}")
         
         # Сохраняем новый статус
-        db.set_task_status(status_key, new_status)
+        try:
+            db.set_task_status(status_key, new_status)
+            logger.info(f"Статус сохранен в БД: {status_key} = {new_status}")
+        except Exception as e:
+            logger.error(f"Ошибка сохранения статуса: {e}", exc_info=True)
         
         # Обновляем статусы после изменения
         if user_initials == "AG":
@@ -325,9 +341,22 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.info(f"Общий статус задачи: {task_status}")
         
         # Обновляем сообщение - обновляем кнопку для этой задачи
+        if not query.message:
+            logger.error("query.message is None")
+            await query.answer("❌ Ошибка: сообщение не найдено", show_alert=True)
+            return
+        
         current_markup = query.message.reply_markup
         
-        if current_markup and current_markup.inline_keyboard:
+        if not current_markup:
+            logger.warning("Клавиатура не найдена в сообщении (current_markup is None)")
+            await query.answer("✅ Статус обновлен", show_alert=False)
+            return
+        
+        if not current_markup.inline_keyboard:
+            logger.warning("Клавиатура пуста (inline_keyboard is None or empty)")
+            await query.answer("✅ Статус обновлен", show_alert=False)
+            return
             # Извлекаем номер задачи из task_id (формат: "0_1" -> номер "1")
             task_num = task_id.split("_")[-1] if "_" in task_id else task_id
             
@@ -369,8 +398,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             if not task_text:
                 logger.error(f"Не удалось извлечь текст задачи для {task_id}")
-                await query.answer("❌ Ошибка обновления", show_alert=True)
-                return
+                # Используем дефолтный текст
+                task_text = f"Задача {task_num}" if task_num else "Задача"
+                logger.warning(f"Используем дефолтный текст задачи: {task_text}")
             
             # Обновляем кнопки в текущей клавиатуре
             new_keyboard = []
@@ -392,16 +422,20 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.edit_message_reply_markup(reply_markup=updated_keyboard)
                 logger.info(f"✅ Кнопка обновлена успешно")
             except Exception as e:
-                logger.error(f"❌ Ошибка обновления кнопки: {e}")
-                await query.answer("❌ Ошибка обновления", show_alert=True)
-        else:
-            logger.warning("Клавиатура не найдена в сообщении")
+                logger.error(f"❌ Ошибка обновления кнопки: {type(e).__name__}: {e}", exc_info=True)
+                # Не падаем, просто логируем ошибку
+                # Возможно, сообщение было изменено другим пользователем
+                pass
         
-        # Отправляем подтверждение
-        if task_status == "✅":
-            await query.answer(f"✅ Задача выполнена! (все участники)", show_alert=False)
-        else:
-            await query.answer(f"⏳ {user_name} взял задачу в работу", show_alert=False)
+        # Отправляем подтверждение (если еще не было отправлено)
+        try:
+            if task_status == "✅":
+                await query.answer(f"✅ Задача выполнена! (все участники)", show_alert=False)
+            else:
+                await query.answer(f"⏳ {user_name} взял задачу в работу", show_alert=False)
+        except Exception as e:
+            logger.warning(f"Не удалось отправить подтверждение: {e}")
+            # Это не критично, просто логируем
             
     except Exception as e:
         logger.error(f"❌ ОШИБКА в button_callback: {e}", exc_info=True)
