@@ -210,7 +210,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(parts) != 3:
         return
     
-    task_id = parts[1]
+    task_id = parts[1]  # Например "0_1" или "urgent"
     user_initials = parts[2]  # AG или KA
     
     # Получаем пользователя
@@ -251,18 +251,46 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Сохраняем в базу данных
     db.set_task_status(status_key, new_status)
     
-    # Обновляем сообщение - получаем актуальные статусы из БД
-    status_ag = db.get_task_status(f"{task_id}_AG") or "⚪"
-    status_ka = db.get_task_status(f"{task_id}_KA") or "⚪"
+    # Обновляем ВСЕ кнопки в сообщении с актуальными статусами из БД
+    # Извлекаем все task_id из текущей клавиатуры
+    current_keyboard = query.message.reply_markup
+    if not current_keyboard or not current_keyboard.inline_keyboard:
+        return
     
-    buttons = [
-        [
-            InlineKeyboardButton(f"АГ {status_ag}", callback_data=f"task_{task_id}_AG"),
-            InlineKeyboardButton(f"КА {status_ka}", callback_data=f"task_{task_id}_KA")
-        ]
-    ]
-    keyboard = InlineKeyboardMarkup(buttons)
+    # Создаем новую клавиатуру с актуальными статусами
+    new_buttons = []
+    for row in current_keyboard.inline_keyboard:
+        new_row = []
+        for button in row:
+            # Парсим callback_data кнопки
+            btn_data = button.callback_data
+            if btn_data and btn_data.startswith("task_"):
+                btn_parts = btn_data.split("_")
+                if len(btn_parts) == 3:
+                    btn_task_id = btn_parts[1]
+                    btn_user_initials = btn_parts[2]
+                    
+                    # Получаем актуальный статус из БД
+                    btn_status_key = f"{btn_task_id}_{btn_user_initials}"
+                    btn_status = db.get_task_status(btn_status_key) or "⚪"
+                    
+                    # Определяем текст кнопки
+                    if btn_user_initials == "AG":
+                        btn_text = f"АГ {btn_status}"
+                    elif btn_user_initials == "KA":
+                        btn_text = f"КА {btn_status}"
+                    else:
+                        btn_text = button.text
+                    
+                    new_row.append(InlineKeyboardButton(btn_text, callback_data=btn_data))
+                else:
+                    new_row.append(button)
+            else:
+                new_row.append(button)
+        if new_row:
+            new_buttons.append(new_row)
     
+    keyboard = InlineKeyboardMarkup(new_buttons)
     await query.edit_message_reply_markup(reply_markup=keyboard)
     
     # Отправляем подтверждение
@@ -308,7 +336,7 @@ async def send_morning_tasks(app, force_weekend=False):
         logger.info(f"Формирование сообщения с {len(day_tasks)} задачами...")
         
         # Формируем текст сообщения со всеми задачами
-        message_text = f"📋 **ЗАДАЧИ НА {day_name.upper()}** ({date_str})\n\n"
+        message_text = f"📋 ЗАДАЧИ НА {day_name.upper()} ({date_str})\n\n"
         
         # Создаем кнопки для всех задач
         all_buttons = []
