@@ -29,6 +29,11 @@ from menu import (
     get_confirm_menu, get_assignee_menu, get_presence_menu,
     get_delay_time_menu, get_delay_minutes_menu
 )
+from handlers import (
+    handle_menu_callback, handle_presence_callback, handle_delay_callback,
+    handle_new_task_callback, handle_old_task_callback, handle_confirm_callback,
+    handle_assignee_callback
+)
 
 # Настройка логирования (записи о работе бота)
 logging.basicConfig(
@@ -267,17 +272,17 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Обработка меню
         if data.startswith("menu_"):
-            await handle_menu_callback(query, data, context)
+            await handle_menu_callback(query, data, context, db)
             return
         
         # Обработка присутствия
         if data.startswith("presence_"):
-            await handle_presence_callback(query, data, context)
+            await handle_presence_callback(query, data, context, db)
             return
         
         # Обработка задержки
         if data.startswith("delay_"):
-            await handle_delay_callback(query, data, context)
+            await handle_delay_callback(query, data, context, db, get_delay_time_menu, get_delay_minutes_menu)
             return
         
         # Обработка задач из меню
@@ -285,296 +290,25 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Проверяем, это старая система задач или новая
             if "_" in data and data.split("_")[1].isdigit():
                 # Старая система (task_0_1)
-                await handle_old_task_callback(query, data, context)
+                await handle_old_task_callback(query, data, context, db)
             else:
                 # Новая система (task_view_1, task_edit_1 и т.д.)
-                await handle_new_task_callback(query, data, context)
+                await handle_new_task_callback(query, data, context, db, get_task_actions_menu, get_confirm_menu)
             return
         
         # Обработка подтверждений
         if data.startswith("confirm_") or data.startswith("cancel_"):
-            await handle_confirm_callback(query, data, context)
+            await handle_confirm_callback(query, data, context, db, get_task_actions_menu, get_tasks_menu)
             return
         
         # Обработка назначения исполнителя
         if data.startswith("assignee_"):
-            await handle_assignee_callback(query, data, context)
+            await handle_assignee_callback(query, data, context, db)
             return
         
         logger.warning(f"Неизвестный формат данных кнопки: {data}")
         await query.answer("❌ Неизвестная команда")
-        return
         
-        # Парсим task_id: формат "task_0_1" -> task_id = "0_1"
-        parts = data.split("_")
-        if len(parts) < 3:  # минимум: ["task", "0", "1"]
-            logger.warning(f"Неверный формат task_id: {data}, parts={parts}")
-            await query.answer()
-            return
-        
-        # task_id = все части после "task" (например, "0_1" из "task_0_1")
-        task_id = "_".join(parts[1:])
-        logger.info(f"Обработка задачи: {task_id}")
-        
-        # Получаем пользователя
-        try:
-            user = query.from_user
-            if not user:
-                logger.error("query.from_user is None")
-                await query.answer("❌ Ошибка: пользователь не найден", show_alert=True)
-                return
-            
-            user_id = user.id
-            username = user.username
-            logger.info(f"Пользователь: @{username} (ID: {user_id})")
-        except Exception as e:
-            logger.error(f"Ошибка получения пользователя: {e}", exc_info=True)
-            await query.answer("❌ Ошибка получения данных пользователя", show_alert=True)
-            return
-        
-        # Отвечаем на callback сразу, чтобы Telegram знал, что запрос обработан
-        try:
-            await query.answer()
-        except Exception as e:
-            logger.warning(f"Не удалось отправить answer: {e}")
-            # Продолжаем работу, даже если answer не отправился
-        
-        # Определяем, какой пользователь нажал (АГ, КА или СА)
-        user_mapping = {
-            "alex301182": {"initials": "AG", "name": "АГ"},
-            "Korudirp": {"initials": "KA", "name": "КА"},
-            "sanya_hui_sosi1488": {"initials": "SA", "name": "СА"}
-        }
-        
-        # Определяем, кто нажал
-        user_initials = None
-        user_name = None
-        
-        if username in user_mapping:
-            user_initials = user_mapping[username]["initials"]
-            user_name = user_mapping[username]["name"]
-            logger.info(f"Пользователь найден: {user_name} ({user_initials})")
-        else:
-            # Проверяем по ID из базы
-            logger.info(f"Username не найден, проверяем по ID...")
-            for uname, info in user_mapping.items():
-                saved_id = db.get_user_id_by_username(uname)
-                if saved_id == user_id:
-                    user_initials = info["initials"]
-                    user_name = info["name"]
-                    username = uname
-                    logger.info(f"Пользователь найден по ID: {user_name} ({user_initials})")
-                    break
-        
-        if not user_initials:
-            logger.warning(f"Пользователь @{username} (ID: {user_id}) не в списке участников")
-            try:
-                await query.answer("❌ Вы не в списке участников", show_alert=True)
-            except:
-                pass
-            return
-        
-        # Сохраняем ID пользователя в базу данных
-        try:
-            logger.info(f"Сохранение ID пользователя в БД: username={username}, user_id={user_id}, initials={user_initials}")
-            db.save_user_id(username, user_id, user_initials)
-            logger.info(f"✅ ID пользователя сохранен в БД")
-        except Exception as e:
-            logger.error(f"❌ Ошибка сохранения ID пользователя: {type(e).__name__}: {e}", exc_info=True)
-            # Продолжаем работу, даже если не удалось сохранить
-        
-        # Получаем текущие статусы для АГ, КА и СА
-        logger.info(f"Получение статусов из БД для задачи {task_id}...")
-        try:
-            status_key_ag = f"{task_id}_AG"
-            status_key_ka = f"{task_id}_KA"
-            status_key_sa = f"{task_id}_SA"
-            logger.info(f"Ключи статусов: AG={status_key_ag}, KA={status_key_ka}, SA={status_key_sa}")
-            
-            status_ag = db.get_task_status(status_key_ag) or "⚪"
-            logger.info(f"Статус АГ получен: {status_ag}")
-            
-            status_ka = db.get_task_status(status_key_ka) or "⚪"
-            logger.info(f"Статус КА получен: {status_ka}")
-            
-            status_sa = db.get_task_status(status_key_sa) or "⚪"
-            logger.info(f"Статус СА получен: {status_sa}")
-            
-            logger.info(f"✅ Текущие статусы: АГ={status_ag}, КА={status_ka}, СА={status_sa}")
-        except Exception as e:
-            logger.error(f"❌ Ошибка получения статусов из БД: {type(e).__name__}: {e}", exc_info=True)
-            status_ag = "⚪"
-            status_ka = "⚪"
-            status_sa = "⚪"
-            logger.warning(f"Используем дефолтные статусы: АГ={status_ag}, КА={status_ka}, СА={status_sa}")
-        
-        # Меняем статус для текущего пользователя: ⚪ → ⏳ → ✅
-        status_key = f"{task_id}_{user_initials}"
-        logger.info(f"Получение текущего статуса для ключа: {status_key}")
-        try:
-            current_status = db.get_task_status(status_key) or "⚪"
-            logger.info(f"Текущий статус получен: {current_status}")
-        except Exception as e:
-            logger.error(f"❌ Ошибка получения текущего статуса: {type(e).__name__}: {e}", exc_info=True)
-            current_status = "⚪"
-            logger.warning(f"Используем дефолтный статус: {current_status}")
-        
-        # Цикл: ⚪ → ⏳ → ✅ → ⚪
-        status_cycle = {"⚪": "⏳", "⏳": "✅", "✅": "⚪"}
-        new_status = status_cycle.get(current_status, "⚪")
-        logger.info(f"🔄 Статус {user_initials}: {current_status} → {new_status}")
-        
-        # Сохраняем новый статус
-        logger.info(f"Сохранение нового статуса: {status_key} = {new_status}")
-        try:
-            db.set_task_status(status_key, new_status)
-            logger.info(f"✅ Статус сохранен в БД: {status_key} = {new_status}")
-        except Exception as e:
-            logger.error(f"❌ Ошибка сохранения статуса: {type(e).__name__}: {e}", exc_info=True)
-            # Продолжаем работу, даже если не удалось сохранить
-        
-        # Обновляем статусы после изменения
-        logger.info(f"Обновление локальных статусов для {user_initials}...")
-        if user_initials == "AG":
-            status_ag = new_status
-            logger.info(f"Статус АГ обновлен: {status_ag}")
-        elif user_initials == "KA":
-            status_ka = new_status
-            logger.info(f"Статус КА обновлен: {status_ka}")
-        elif user_initials == "SA":
-            status_sa = new_status
-            logger.info(f"Статус СА обновлен: {status_sa}")
-        else:
-            logger.warning(f"Неизвестные инициалы: {user_initials}")
-        
-        # Определяем общий статус задачи для отображения (✅ только когда все 3 выполнили)
-        logger.info(f"Вычисление общего статуса: АГ={status_ag}, КА={status_ka}, СА={status_sa}")
-        if status_ag == "✅" and status_ka == "✅" and status_sa == "✅":
-            task_status = "✅"  # Все трое выполнили
-            logger.info("✅ Все участники выполнили задачу")
-        elif status_ag != "⚪" or status_ka != "⚪" or status_sa != "⚪":
-            task_status = "⏳"  # Кто-то взял в работу
-            logger.info("⏳ Кто-то взял задачу в работу")
-        else:
-            task_status = "⚪"  # Никто не взял
-            logger.info("⚪ Никто не взял задачу")
-        
-        logger.info(f"✅ Общий статус задачи: {task_status}")
-        
-        # Обновляем сообщение - обновляем кнопку для этой задачи
-        if not query.message:
-            logger.error("query.message is None")
-            await query.answer("❌ Ошибка: сообщение не найдено", show_alert=True)
-            return
-        
-        current_markup = query.message.reply_markup
-        
-        if not current_markup:
-            logger.warning("Клавиатура не найдена в сообщении (current_markup is None)")
-            await query.answer("✅ Статус обновлен", show_alert=False)
-            return
-        
-        if not current_markup.inline_keyboard:
-            logger.warning("Клавиатура пуста (inline_keyboard is None or empty)")
-            await query.answer("✅ Статус обновлен", show_alert=False)
-            return
-        
-        # Извлекаем номер задачи из task_id (формат: "0_1" -> номер "1")
-        task_num = task_id.split("_")[-1] if "_" in task_id else task_id
-        
-        # Ищем текст задачи из кнопки (это надежнее)
-        task_text = ""
-        original_button_text = ""
-        
-        for row in current_markup.inline_keyboard:
-            for button in row:
-                if button.callback_data == f"task_{task_id}":
-                    original_button_text = button.text
-                    # Извлекаем текст задачи из кнопки
-                    # Формат: "1. Название задачи ⚪"
-                    if "." in original_button_text:
-                        # Разделяем на номер и остальное
-                        parts_btn = original_button_text.split(".", 1)
-                        task_text = parts_btn[1].strip() if len(parts_btn) > 1 else original_button_text
-                        # Убираем статусы
-                        task_text = task_text.replace("⚪", "").replace("⏳", "").replace("✅", "").strip()
-                    else:
-                        task_text = original_button_text.replace("⚪", "").replace("⏳", "").replace("✅", "").strip()
-                    logger.info(f"Текст задачи из кнопки: '{task_text}'")
-                    break
-            if task_text:
-                break
-        
-        # Если не нашли в кнопке - ищем в тексте сообщения
-        if not task_text:
-            message_text = query.message.text or ""
-            for line in message_text.split("\n"):
-                line_stripped = line.strip()
-                if line_stripped.startswith(f"{task_num}."):
-                    task_text = line_stripped
-                    if "." in task_text:
-                        task_text = task_text.split(".", 1)[1].strip()
-                    task_text = task_text.replace("⚪", "").replace("⏳", "").replace("✅", "").replace("**", "").strip()
-                    logger.info(f"Текст задачи из сообщения: '{task_text}'")
-                    break
-        
-        if not task_text:
-            logger.error(f"Не удалось извлечь текст задачи для {task_id}")
-            # Используем дефолтный текст
-            task_text = f"Задача {task_num}" if task_num else "Задача"
-            logger.warning(f"Используем дефолтный текст задачи: {task_text}")
-        
-        # Обновляем кнопки в текущей клавиатуре
-        new_keyboard = []
-        for row in current_markup.inline_keyboard:
-            new_row = []
-            for button in row:
-                # Если это кнопка для нашей задачи - обновляем статус
-                if button.callback_data == f"task_{task_id}":
-                    # Сохраняем номер задачи в новом тексте
-                    # ОПТИМИЗАЦИЯ ДЛЯ МОБИЛЬНЫХ: ограничиваем длину до 30 символов
-                    max_mobile_length = 30
-                    if len(task_text) > max_mobile_length:
-                        task_text_short = task_text[:max_mobile_length-3] + "..."
-                        new_text = f"{task_num}. {task_text_short} {task_status}"
-                    else:
-                        new_text = f"{task_num}. {task_text} {task_status}"
-                    
-                    # Дополнительная проверка на случай, если номер задачи делает текст слишком длинным
-                    if len(new_text) > 35:  # Оставляем запас
-                        max_text_len = 35 - len(f"{task_num}. {task_status}")
-                        task_text_short = task_text[:max_text_len-3] + "..."
-                        new_text = f"{task_num}. {task_text_short} {task_status}"
-                        logger.warning(f"Текст кнопки укорочен для мобильных: '{new_text}'")
-                    
-                    logger.info(f"Обновляем кнопку: '{original_button_text}' → '{new_text}'")
-                    new_row.append(InlineKeyboardButton(new_text, callback_data=button.callback_data))
-                else:
-                    new_row.append(button)
-            new_keyboard.append(new_row)
-        
-        updated_keyboard = InlineKeyboardMarkup(new_keyboard)
-        try:
-            await query.edit_message_reply_markup(reply_markup=updated_keyboard)
-            logger.info(f"✅ Кнопка обновлена успешно")
-        except Exception as e:
-            logger.error(f"❌ Ошибка обновления кнопки: {type(e).__name__}: {e}", exc_info=True)
-            # Не падаем, просто логируем ошибку
-            # Возможно, сообщение было изменено другим пользователем
-            pass
-        
-        # Отправляем подтверждение (query.answer уже был вызван в начале, но это второй вызов для уведомления)
-        # Telegram позволяет вызывать answer несколько раз, но показывается только последний
-        try:
-            if task_status == "✅":
-                await query.answer(f"✅ Задача выполнена! (все участники)", show_alert=False)
-            else:
-                await query.answer(f"⏳ {user_name} взял задачу в работу", show_alert=False)
-        except Exception as e:
-            logger.warning(f"Не удалось отправить подтверждение: {e}")
-            # Это не критично, просто логируем
-            # query.answer уже был вызван в начале функции
-            
     except Exception as e:
         logger.error(f"❌ КРИТИЧЕСКАЯ ОШИБКА в button_callback: {type(e).__name__}: {e}", exc_info=True)
         try:

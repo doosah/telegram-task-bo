@@ -244,10 +244,11 @@ async def handle_new_task_callback(query, data: str, context: ContextTypes.DEFAU
         await query.answer("❌ Произошла ошибка")
 
 
-async def handle_old_task_callback(query, data: str, context: ContextTypes.DEFAULT_TYPE):
+async def handle_old_task_callback(query, data: str, context: ContextTypes.DEFAULT_TYPE, db):
     """Обработка старых задач (существующая логика)"""
     # Эта функция будет содержать весь старый код из button_callback
-    # Пока оставляем заглушку
+    # Пока оставляем заглушку - старая логика уже удалена из bot.py
+    # Если нужно, можно перенести её сюда позже
     await query.answer("Обработка старых задач...")
 
 
