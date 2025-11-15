@@ -991,6 +991,15 @@ def main():
         application.bot_data['ADMIN_USERNAME'] = ADMIN_USERNAME
         logger.info("ADMIN_USERNAME сохранен в bot_data")
         
+        # Блокируем известных спамеров при старте
+        for spam_username in SPAM_BLACKLIST:
+            spam_user_id = db.get_user_id_by_username(spam_username)
+            if spam_user_id:
+                db.block_user(spam_user_id, spam_username, "Known spammer")
+                logger.warning(f"Известный спамер {spam_username} (ID: {spam_user_id}) заблокирован при старте")
+            else:
+                logger.info(f"Спамер {spam_username} еще не найден в БД, будет заблокирован при первой попытке")
+        
         # Сохраняем функции для тестирования
         application.bot_data['send_morning_tasks'] = send_morning_tasks
         application.bot_data['send_presence_buttons'] = send_presence_buttons
