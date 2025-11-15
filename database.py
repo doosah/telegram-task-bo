@@ -28,40 +28,47 @@ class Database:
     
     def init_database(self):
         """Создает таблицы в базе данных, если их еще нет"""
-        with db_lock:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            
-            # Таблица для статусов задач
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS task_statuses (
-                    task_key TEXT PRIMARY KEY,
-                    status TEXT NOT NULL DEFAULT '⚪'
-                )
-            ''')
-            
-            # Таблица для хранения ID пользователей
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS users (
-                    username TEXT PRIMARY KEY,
-                    user_id INTEGER NOT NULL,
-                    initials TEXT NOT NULL
-                )
-            ''')
-            
-            # Добавляем начальных пользователей, если их еще нет
-            initial_users = [
-                ('alex301182', None, 'AG'),
-                ('Korudirp', None, 'KA')
-            ]
-            
-            cursor.executemany('''
-                INSERT OR IGNORE INTO users (username, user_id, initials)
-                VALUES (?, ?, ?)
-            ''', initial_users)
-            
-            conn.commit()
-            conn.close()
+        try:
+            with db_lock:
+                conn = self.get_connection()
+                cursor = conn.cursor()
+                
+                # Таблица для статусов задач
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS task_statuses (
+                        task_key TEXT PRIMARY KEY,
+                        status TEXT NOT NULL DEFAULT '⚪'
+                    )
+                ''')
+                
+                # Таблица для хранения ID пользователей
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS users (
+                        username TEXT PRIMARY KEY,
+                        user_id INTEGER,
+                        initials TEXT NOT NULL
+                    )
+                ''')
+                
+                # Добавляем начальных пользователей, если их еще нет
+                initial_users = [
+                    ('alex301182', None, 'AG'),
+                    ('Korudirp', None, 'KA'),
+                    ('sanya_hui_sosi1488', None, 'SA')
+                ]
+                
+                cursor.executemany('''
+                    INSERT OR IGNORE INTO users (username, user_id, initials)
+                    VALUES (?, ?, ?)
+                ''', initial_users)
+                
+                conn.commit()
+                conn.close()
+        except Exception as e:
+            # Логируем ошибку, но не падаем
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Ошибка инициализации БД: {e}", exc_info=True)
     
     def get_task_status(self, task_key: str) -> str:
         """
@@ -146,15 +153,22 @@ class Database:
         Получить список всех ID пользователей
         Возвращает список ID для отправки личных сообщений
         """
-        with db_lock:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            
-            cursor.execute('SELECT user_id FROM users WHERE user_id IS NOT NULL')
-            results = cursor.fetchall()
-            conn.close()
-            
-            return [row[0] for row in results if row[0] is not None]
+        try:
+            with db_lock:
+                conn = self.get_connection()
+                cursor = conn.cursor()
+                
+                cursor.execute('SELECT user_id FROM users WHERE user_id IS NOT NULL')
+                results = cursor.fetchall()
+                conn.close()
+                
+                return [row[0] for row in results if row[0] is not None]
+        except Exception as e:
+            # Логируем ошибку, но не падаем
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Ошибка получения списка ID пользователей: {e}", exc_info=True)
+            return []
     
     def get_user_id_by_username(self, username: str) -> int:
         """

@@ -124,7 +124,8 @@ async def add_urgent_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
             msg = await context.bot.send_message(
                 chat_id=chat_id,
                 text=f"🔥 **ВНЕПЛАНОВАЯ ЗАДАЧА**\n\n{urgent_task}",
-                reply_markup=keyboard
+                reply_markup=keyboard,
+                parse_mode='Markdown'
             )
             logger.info(f"✅ Срочная задача успешно отправлена в чат {chat_id}. Message ID: {msg.message_id}")
         except Exception as send_error:
@@ -518,7 +519,7 @@ async def send_morning_tasks(app, force_weekend=False):
         logger.info(f"Формирование сообщения с {len(day_tasks)} задачами...")
         
         # Создаем текст сообщения со всеми задачами
-        message_text = f"📋 **ЗАДАЧИ НА {day_name.upper()}** ({date_str})\n\n"
+        message_text = f"📋 ЗАДАЧИ НА {day_name.upper()} ({date_str})\n\n"
         
         # Создаем кнопки для всех задач (ОДНА кнопка на задачу)
         all_buttons = []
@@ -618,39 +619,54 @@ async def send_reminders(app: Application):
 
 async def send_evening_summary(app: Application):
     """Отправка итогов дня в 16:50"""
-    today = datetime.now(MOSCOW_TZ).weekday()
-    
-    if today > 4:
-        return
-    
-    # Получаем задачи на сегодня
-    day_tasks = tasks_manager.get_tasks_for_day(today)
-    
-    if not day_tasks:
+    try:
+        today = datetime.now(MOSCOW_TZ).weekday()
+        
+        if today > 4:
+            return
+        
+        # Получаем задачи на сегодня
+        day_tasks = tasks_manager.get_tasks_for_day(today)
+        
+        if not day_tasks:
+            return
+    except Exception as e:
+        logger.error(f"❌ Ошибка в начале send_evening_summary: {e}", exc_info=True)
         return
     
     # Собираем невыполненные задачи
     incomplete = []
-    for i, task in enumerate(day_tasks, 1):
-        task_id = f"{today}_{i}"
-        status_ag = db.get_task_status(f"{task_id}_AG")
-        status_ka = db.get_task_status(f"{task_id}_KA")
-        status_sa = db.get_task_status(f"{task_id}_SA")
-        
-        # Задача невыполнена, если хотя бы один не выполнил
-        if status_ag != "✅" or status_ka != "✅" or status_sa != "✅":
-            users_needed = []
-            if status_ag != "✅":
-                users_needed.append("@alex301182")
-            if status_ka != "✅":
-                users_needed.append("@Korudirp")
-            if status_sa != "✅":
-                users_needed.append("@sanya_hui_sosi1488")
+    try:
+        for i, task in enumerate(day_tasks, 1):
+            task_id = f"{today}_{i}"
+            try:
+                status_ag = db.get_task_status(f"{task_id}_AG")
+                status_ka = db.get_task_status(f"{task_id}_KA")
+                status_sa = db.get_task_status(f"{task_id}_SA")
+            except Exception as e:
+                logger.error(f"Ошибка получения статусов для задачи {task_id}: {e}", exc_info=True)
+                # Используем дефолтные статусы
+                status_ag = "⚪"
+                status_ka = "⚪"
+                status_sa = "⚪"
             
-            incomplete.append({
-                "task": task,
-                "users": " ".join(users_needed)
-            })
+            # Задача невыполнена, если хотя бы один не выполнил
+            if status_ag != "✅" or status_ka != "✅" or status_sa != "✅":
+                users_needed = []
+                if status_ag != "✅":
+                    users_needed.append("@alex301182")
+                if status_ka != "✅":
+                    users_needed.append("@Korudirp")
+                if status_sa != "✅":
+                    users_needed.append("@sanya_hui_sosi1488")
+                
+                incomplete.append({
+                    "task": task,
+                    "users": " ".join(users_needed)
+                })
+    except Exception as e:
+        logger.error(f"❌ Ошибка обработки задач для итогов дня: {e}", exc_info=True)
+        incomplete = []
     
     if not incomplete:
         message = "✅ **ИТОГИ ДНЯ**\n\nВсе задачи выполнены! 🎉"
@@ -660,11 +676,17 @@ async def send_evening_summary(app: Application):
             message += f"• {item['task']} {item['users']}\n"
     
     # Отправляем в группу
-    await app.bot.send_message(
-        chat_id=CHAT_ID,
-        text=message,
-        parse_mode='Markdown'
-    )
+    try:
+        # Преобразуем CHAT_ID в int если это строка
+        chat_id = int(CHAT_ID) if isinstance(CHAT_ID, str) else CHAT_ID
+        await app.bot.send_message(
+            chat_id=chat_id,
+            text=message,
+            parse_mode='Markdown'
+        )
+        logger.info(f"✅ Итоги дня отправлены в чат {chat_id}")
+    except Exception as e:
+        logger.error(f"❌ Ошибка отправки итогов дня: {type(e).__name__}: {e}", exc_info=True)
 
 
 def setup_scheduler(app: Application):
