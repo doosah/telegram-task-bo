@@ -392,19 +392,25 @@ async def finish_create_task(update: Update, context: ContextTypes.DEFAULT_TYPE)
                         f"👨‍💼 Создатель: @{creator}"
                     )
                     
-                    # Создаем кнопки "Взять в работу" для исполнителей
+                    # Создаем простые кнопки: "Взять в работу" и "Готово"
                     work_buttons = []
                     if assignee == "all":
                         # Если исполнитель "Все", показываем кнопки для всех
                         work_buttons = [
-                            [InlineKeyboardButton("👤 АГ - Взять в работу", callback_data=f"work_task_{task_id}_AG")],
-                            [InlineKeyboardButton("👤 КА - Взять в работу", callback_data=f"work_task_{task_id}_KA")],
-                            [InlineKeyboardButton("👤 СА - Взять в работу", callback_data=f"work_task_{task_id}_SA")]
+                            [InlineKeyboardButton("👤 АГ - Взять в работу", callback_data=f"work_take_{task_id}_AG")],
+                            [InlineKeyboardButton("✅ АГ - Готово", callback_data=f"work_done_{task_id}_AG")],
+                            [InlineKeyboardButton("👤 КА - Взять в работу", callback_data=f"work_take_{task_id}_KA")],
+                            [InlineKeyboardButton("✅ КА - Готово", callback_data=f"work_done_{task_id}_KA")],
+                            [InlineKeyboardButton("👤 СА - Взять в работу", callback_data=f"work_take_{task_id}_SA")],
+                            [InlineKeyboardButton("✅ СА - Готово", callback_data=f"work_done_{task_id}_SA")]
                         ]
                     else:
-                        # Если конкретный исполнитель, показываем одну кнопку
+                        # Если конкретный исполнитель, показываем две кнопки
                         assignee_full = assignee_names.get(assignee, assignee)
-                        work_buttons = [[InlineKeyboardButton(f"👤 {assignee_full} - Взять в работу", callback_data=f"work_task_{task_id}_{assignee}")]]
+                        work_buttons = [
+                            [InlineKeyboardButton(f"👤 {assignee_full} - Взять в работу", callback_data=f"work_take_{task_id}_{assignee}")],
+                            [InlineKeyboardButton(f"✅ {assignee_full} - Готово", callback_data=f"work_done_{task_id}_{assignee}")]
+                        ]
                     
                     work_keyboard = InlineKeyboardMarkup(work_buttons)
                     

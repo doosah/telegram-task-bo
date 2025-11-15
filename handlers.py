@@ -634,3 +634,223 @@ async def handle_assignee_callback(query, data: str, context: ContextTypes.DEFAU
         logger.error(f"Ошибка в handle_assignee_callback: {e}", exc_info=True)
         await query.answer("❌ Произошла ошибка")
 
+
+async def handle_work_task_take(query, data: str, context: ContextTypes.DEFAULT_TYPE, db):
+    """Обработка кнопки 'Взять в работу' - просто отмечает, что задача взята"""
+    try:
+        await query.answer()
+        
+        # Парсим данные: work_take_{task_id}_{assignee}
+        parts = data.split("_")
+        if len(parts) < 4:
+            await query.answer("❌ Неверный формат", show_alert=True)
+            return
+        
+        try:
+            task_id = int(parts[2])
+            assignee = parts[3]
+            if assignee not in ["AG", "KA", "SA"]:
+                await query.answer("❌ Неверный исполнитель", show_alert=True)
+                return
+        except (ValueError, IndexError):
+            await query.answer("❌ Ошибка формата данных", show_alert=True)
+            return
+        
+        # Получаем задачу
+        task = db.get_custom_task(task_id)
+        if not task:
+            await query.answer("❌ Задача не найдена", show_alert=True)
+            return
+        
+        # Определяем пользователя
+        user = query.from_user
+        username = user.username if user.username else f"user_{user.id}"
+        user_id = user.id
+        
+        # Обновляем статус задачи на "in_progress"
+        from datetime import datetime
+        db.update_custom_task(task_id, status='in_progress')
+        
+        # Уведомляем администратора
+        try:
+            admin_id = context.bot_data.get('admin_id')
+            if not admin_id:
+                admin_username = context.bot_data.get('ADMIN_USERNAME')
+                if not admin_username:
+                    import os
+                    admin_username = os.getenv('ADMIN_USERNAME', '').strip()
+                if admin_username:
+                    admin_id = db.get_user_id_by_username(admin_username)
+                    if admin_id:
+                        context.bot_data['admin_id'] = admin_id
+            
+            if admin_id:
+                admin_text = (
+                    f"📋 **ЗАДАЧА ВЗЯТА В РАБОТУ**\n\n"
+                    f"📝 Задача: {task['title']}\n"
+                    f"👤 Исполнитель: @{username} ({assignee})\n"
+                    f"🆔 ID задачи: #{task_id}\n"
+                    f"🕐 Время: {datetime.now().strftime('%H:%M')}"
+                )
+                await context.bot.send_message(
+                    chat_id=admin_id,
+                    text=admin_text,
+                    parse_mode='Markdown'
+                )
+                logger.info(f"Уведомление о взятии задачи #{task_id} отправлено администратору {admin_id}")
+        except Exception as e:
+            logger.error(f"Ошибка отправки уведомления администратору: {e}", exc_info=True)
+        
+        # Обновляем кнопку в сообщении группы (если это сообщение из группы)
+        if query.message and query.message.chat.type in ['group', 'supergroup']:
+            # Обновляем клавиатуру - убираем кнопку "Взять в работу" для этого исполнителя, оставляем "Готово"
+            current_markup = query.message.reply_markup
+            if current_markup and current_markup.inline_keyboard:
+                new_keyboard = []
+                for row in current_markup.inline_keyboard:
+                    new_row = []
+                    for button in row:
+                        # Если это кнопка "Взять в работу" для этого исполнителя - заменяем на "✅ В работе"
+                        if button.callback_data == data:
+                            new_row.append(InlineKeyboardButton(
+                                f"✅ {assignee} - В работе",
+                                callback_data=f"work_status_{task_id}_{assignee}"
+                            ))
+                        else:
+                            new_row.append(button)
+                    if new_row:
+                        new_keyboard.append(new_row)
+                
+                try:
+                    await query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup(new_keyboard))
+                except Exception as e:
+                    logger.error(f"Ошибка обновления клавиатуры: {e}", exc_info=True)
+        
+        # Отправляем подтверждение пользователю в личные сообщения
+        try:
+            confirm_text = f"✅ Задача #{task_id} взята в работу!\n\n📝 {task['title']}"
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=confirm_text
+            )
+        except Exception as e:
+            logger.error(f"Ошибка отправки подтверждения пользователю: {e}", exc_info=True)
+        
+        logger.info(f"Задача #{task_id} взята в работу пользователем @{username} ({assignee})")
+        
+    except Exception as e:
+        logger.error(f"Ошибка в handle_work_task_take: {e}", exc_info=True)
+        await query.answer("❌ Произошла ошибка", show_alert=True)
+
+
+async def handle_work_task_done(query, data: str, context: ContextTypes.DEFAULT_TYPE, db):
+    """Обработка кнопки 'Готово' - отмечает задачу как выполненную"""
+    try:
+        await query.answer()
+        
+        # Парсим данные: work_done_{task_id}_{assignee}
+        parts = data.split("_")
+        if len(parts) < 4:
+            await query.answer("❌ Неверный формат", show_alert=True)
+            return
+        
+        try:
+            task_id = int(parts[2])
+            assignee = parts[3]
+            if assignee not in ["AG", "KA", "SA"]:
+                await query.answer("❌ Неверный исполнитель", show_alert=True)
+                return
+        except (ValueError, IndexError):
+            await query.answer("❌ Ошибка формата данных", show_alert=True)
+            return
+        
+        # Получаем задачу
+        task = db.get_custom_task(task_id)
+        if not task:
+            await query.answer("❌ Задача не найдена", show_alert=True)
+            return
+        
+        # Определяем пользователя
+        user = query.from_user
+        username = user.username if user.username else f"user_{user.id}"
+        user_id = user.id
+        
+        # Обновляем статус задачи на "completed"
+        from datetime import datetime
+        db.update_custom_task(
+            task_id,
+            status='completed',
+            completed_at=datetime.now().isoformat()
+        )
+        
+        # Уведомляем администратора
+        try:
+            admin_id = context.bot_data.get('admin_id')
+            if not admin_id:
+                admin_username = context.bot_data.get('ADMIN_USERNAME')
+                if not admin_username:
+                    import os
+                    admin_username = os.getenv('ADMIN_USERNAME', '').strip()
+                if admin_username:
+                    admin_id = db.get_user_id_by_username(admin_username)
+                    if admin_id:
+                        context.bot_data['admin_id'] = admin_id
+            
+            if admin_id:
+                admin_text = (
+                    f"✅ **ЗАДАЧА ЗАВЕРШЕНА**\n\n"
+                    f"📝 Задача: {task['title']}\n"
+                    f"👤 Исполнитель: @{username} ({assignee})\n"
+                    f"🆔 ID задачи: #{task_id}\n"
+                    f"🕐 Время: {datetime.now().strftime('%H:%M')}"
+                )
+                await context.bot.send_message(
+                    chat_id=admin_id,
+                    text=admin_text,
+                    parse_mode='Markdown'
+                )
+                logger.info(f"Уведомление о завершении задачи #{task_id} отправлено администратору {admin_id}")
+        except Exception as e:
+            logger.error(f"Ошибка отправки уведомления администратору: {e}", exc_info=True)
+        
+        # Обновляем кнопку в сообщении группы (если это сообщение из группы)
+        if query.message and query.message.chat.type in ['group', 'supergroup']:
+            # Обновляем клавиатуру - убираем обе кнопки для этого исполнителя, показываем "✅ Выполнено"
+            current_markup = query.message.reply_markup
+            if current_markup and current_markup.inline_keyboard:
+                new_keyboard = []
+                for row in current_markup.inline_keyboard:
+                    new_row = []
+                    for button in row:
+                        # Если это кнопка для этого исполнителя - заменяем на "✅ Выполнено"
+                        if f"work_take_{task_id}_{assignee}" in button.callback_data or f"work_done_{task_id}_{assignee}" in button.callback_data:
+                            new_row.append(InlineKeyboardButton(
+                                f"✅ {assignee} - Выполнено",
+                                callback_data=f"work_status_{task_id}_{assignee}"
+                            ))
+                        else:
+                            new_row.append(button)
+                    if new_row:
+                        new_keyboard.append(new_row)
+                
+                try:
+                    await query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup(new_keyboard))
+                except Exception as e:
+                    logger.error(f"Ошибка обновления клавиатуры: {e}", exc_info=True)
+        
+        # Отправляем подтверждение пользователю в личные сообщения
+        try:
+            confirm_text = f"✅ Задача #{task_id} отмечена как выполненная!\n\n📝 {task['title']}"
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=confirm_text
+            )
+        except Exception as e:
+            logger.error(f"Ошибка отправки подтверждения пользователю: {e}", exc_info=True)
+        
+        logger.info(f"Задача #{task_id} отмечена как выполненная пользователем @{username} ({assignee})")
+        
+    except Exception as e:
+        logger.error(f"Ошибка в handle_work_task_done: {e}", exc_info=True)
+        await query.answer("❌ Произошла ошибка", show_alert=True)
+

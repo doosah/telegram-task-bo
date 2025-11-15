@@ -32,7 +32,7 @@ from menu import (
 from handlers import (
     handle_menu_callback, handle_presence_callback, handle_delay_callback,
     handle_new_task_callback, handle_old_task_callback, handle_confirm_callback,
-    handle_assignee_callback
+    handle_assignee_callback, handle_work_task_take, handle_work_task_done
 )
 
 # Настройка логирования (записи о работе бота)
@@ -589,9 +589,13 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await handle_assignee_callback(query, data, context, db)
             return
         
-        # Обработка "Взять в работу" - передаем ConversationHandler
-        if data.startswith("work_task_"):
-            # ConversationHandler обработает это через entry_points
+        # Обработка "Взять в работу" и "Готово"
+        if data.startswith("work_take_"):
+            await handle_work_task_take(query, data, context, db)
+            return
+        
+        if data.startswith("work_done_"):
+            await handle_work_task_done(query, data, context, db)
             return
         
         logger.warning(f"Неизвестный формат данных кнопки: {data}")
