@@ -204,41 +204,29 @@ async def handle_presence_callback(query, data: str, context: ContextTypes.DEFAU
         user_id = user.id
         
         if data == "presence_here":
-            # На рабочем месте
+            # На рабочем месте - отправляем сообщение в общий чат
             time_str = datetime.now().strftime("%H:%M")
             db.save_presence(username, user_id, "here", time=time_str)
             
-            # Отправляем уведомление администратору
+            # Отправляем сообщение в общий чат от пользователя
             try:
-                # Получаем admin_id
-                admin_id = None
-                if 'admin_id' in context.bot_data:
-                    admin_id = context.bot_data['admin_id']
-                else:
-                    # Пытаемся получить из БД
-                    admin_username = context.bot_data.get('ADMIN_USERNAME')
-                    if not admin_username:
-                        # Fallback: пытаемся получить из переменных окружения
-                        import os
-                        admin_username = os.getenv('ADMIN_USERNAME', '').strip()
-                    
-                    if admin_username:
-                        admin_id = db.get_user_id_by_username(admin_username)
-                        if admin_id:
-                            context.bot_data['admin_id'] = admin_id
+                chat_id = context.bot_data.get('CHAT_ID')
+                if not chat_id:
+                    import os
+                    chat_id = os.getenv('CHAT_ID', '').strip()
                 
-                if admin_id:
-                    text = f"✅ **ПРИБЫТИЕ**\n\n👤 Логин: @{username}\n⏰ Время: {time_str}\n📍 Статус: На рабочем месте"
+                if chat_id:
+                    chat_id = int(chat_id) if isinstance(chat_id, str) else chat_id
+                    message_text = f"На рабочем месте. {time_str}"
                     await context.bot.send_message(
-                        chat_id=admin_id,
-                        text=text,
-                        parse_mode='Markdown'
+                        chat_id=chat_id,
+                        text=message_text
                     )
-                    logger.info(f"Уведомление о прибытии отправлено администратору {admin_id}")
+                    logger.info(f"Сообщение о прибытии отправлено в общий чат {chat_id} от @{username}")
                 
                 await query.answer("✅ Отметка сохранена!")
             except Exception as e:
-                logger.error(f"Ошибка отправки уведомления администратору: {e}", exc_info=True)
+                logger.error(f"Ошибка отправки сообщения в общий чат: {e}", exc_info=True)
                 await query.answer("✅ Отметка сохранена!")
         
         elif data == "presence_late":
@@ -289,7 +277,7 @@ async def handle_delay_callback(query, data: str, context: ContextTypes.DEFAULT_
             await query.answer()
         
         elif parts[1] == "minute":
-            # Выбрали минуты, запрашиваем причину
+            # Выбрали минуты - отправляем сообщение в общий чат и уведомление сотруднику
             try:
                 hour = int(parts[2])
                 minute = int(parts[3])
@@ -301,35 +289,39 @@ async def handle_delay_callback(query, data: str, context: ContextTypes.DEFAULT_
             context.user_data['delay_hour'] = hour
             context.user_data['delay_minute'] = minute
             
-            # Проверяем, это сообщение из группы или личное
-            if query.message and query.message.chat.type in ['group', 'supergroup']:
-                # Это группа - отправляем запрос в личные сообщения
-                text = (
-                    f"⏰ **ОПОЗДАНИЕ**\n\n"
-                    f"Выбрано: {hour}ч {minute}м\n\n"
-                    f"Введите краткую причину опоздания (одним сообщением):"
-                )
-                try:
+            # Отправляем сообщение в общий чат от сотрудника
+            try:
+                chat_id = context.bot_data.get('CHAT_ID')
+                if not chat_id:
+                    import os
+                    chat_id = os.getenv('CHAT_ID', '').strip()
+                
+                if chat_id:
+                    chat_id = int(chat_id) if isinstance(chat_id, str) else chat_id
+                    delay_text = f"Опоздание. {hour}ч {minute}м"
                     await context.bot.send_message(
-                        chat_id=user_id,
-                        text=text,
-                        parse_mode='Markdown'
+                        chat_id=chat_id,
+                        text=delay_text
                     )
-                    await query.answer("✅ Введите причину в личные сообщения боту")
-                except Exception as e:
-                    logger.error(f"Ошибка отправки запроса в личные сообщения: {e}", exc_info=True)
-                    await query.answer("❌ Не удалось отправить запрос. Напишите боту в личные сообщения.")
-            else:
-                # Это личное сообщение - редактируем
-                text = (
-                    f"⏰ **ОПОЗДАНИЕ**\n\n"
-                    f"Выбрано: {hour}ч {minute}м\n\n"
-                    f"Введите краткую причину опоздания (одним сообщением):"
-                )
-                await query.edit_message_text(text, parse_mode='Markdown')
-                await query.answer()
+                    logger.info(f"Сообщение об опоздании отправлено в общий чат {chat_id} от @{username}")
+            except Exception as e:
+                logger.error(f"Ошибка отправки сообщения в общий чат: {e}", exc_info=True)
             
-            context.user_data['waiting_reason'] = True
+            # Отправляем сотруднику сообщение о необходимости написать причину
+            try:
+                reason_text = "Напишите руководителю причину опоздания."
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text=reason_text
+                )
+                await query.answer("✅ Сообщение отправлено в общий чат")
+            except Exception as e:
+                logger.error(f"Ошибка отправки уведомления сотруднику: {e}", exc_info=True)
+                await query.answer("✅ Сообщение отправлено в общий чат")
+            
+            # Сохраняем в БД
+            time_str = datetime.now().strftime("%H:%M")
+            db.save_presence(username, user_id, "late", time=time_str, delay_minutes=delay_minutes)
     
     except Exception as e:
         logger.error(f"Ошибка в handle_delay_callback: {e}", exc_info=True)
@@ -667,9 +659,45 @@ async def handle_work_task_take(query, data: str, context: ContextTypes.DEFAULT_
         username = user.username if user.username else f"user_{user.id}"
         user_id = user.id
         
-        # Обновляем статус задачи на "in_progress"
+        # Обновляем статус задачи на "in_progress" и добавляем индикатор ⏰ в сообщение
         from datetime import datetime
         db.update_custom_task(task_id, status='in_progress')
+        
+        # Обновляем сообщение в группе - добавляем ⏰ к тексту задачи
+        if query.message and query.message.chat.type in ['group', 'supergroup']:
+            try:
+                assignee_names = {
+                    "AG": "Lysenko Alexander",
+                    "KA": "Ruslan Cherenkov",
+                    "SA": "Test"
+                }
+                assignee_name = assignee_names.get(assignee, assignee)
+                
+                # Получаем текущий текст сообщения
+                current_text = query.message.text or query.message.caption or ""
+                
+                # Добавляем индикатор ⏰ к названию задачи, если его еще нет
+                if "⏰" not in current_text and task['title'] in current_text:
+                    # Заменяем название задачи на название с индикатором
+                    new_text = current_text.replace(
+                        f"📝 **{task['title']}**",
+                        f"📝 **{task['title']}** ⏰"
+                    )
+                    # Если не нашлось, пробуем другой формат
+                    if new_text == current_text:
+                        new_text = current_text.replace(
+                            task['title'],
+                            f"{task['title']} ⏰"
+                        )
+                    
+                    if new_text != current_text:
+                        await query.message.edit_text(
+                            text=new_text,
+                            reply_markup=query.message.reply_markup,
+                            parse_mode='Markdown'
+                        )
+            except Exception as e:
+                logger.error(f"Ошибка обновления текста сообщения: {e}", exc_info=True)
         
         # Уведомляем администратора
         try:
@@ -710,11 +738,17 @@ async def handle_work_task_take(query, data: str, context: ContextTypes.DEFAULT_
                 for row in current_markup.inline_keyboard:
                     new_row = []
                     for button in row:
-                        # Если это кнопка "Взять в работу" для этого исполнителя - заменяем на "✅ В работе"
+                        # Если это кнопка "Взять в работу" для этого исполнителя - заменяем на "Готово"
                         if button.callback_data == data:
+                            assignee_names = {
+                                "AG": "Lysenko Alexander",
+                                "KA": "Ruslan Cherenkov",
+                                "SA": "Test"
+                            }
+                            assignee_name = assignee_names.get(assignee, assignee)
                             new_row.append(InlineKeyboardButton(
-                                f"✅ {assignee} - В работе",
-                                callback_data=f"work_status_{task_id}_{assignee}"
+                                f"✅ {assignee_name} - Готово",
+                                callback_data=f"work_done_{task_id}_{assignee}"
                             ))
                         else:
                             new_row.append(button)
@@ -726,15 +760,27 @@ async def handle_work_task_take(query, data: str, context: ContextTypes.DEFAULT_
                 except Exception as e:
                     logger.error(f"Ошибка обновления клавиатуры: {e}", exc_info=True)
         
-        # Отправляем подтверждение пользователю в личные сообщения
+        # Отправляем описание задачи пользователю в личные сообщения
         try:
-            confirm_text = f"✅ Задача #{task_id} взята в работу!\n\n📝 {task['title']}"
+            assignee_names = {
+                "AG": "Lysenko Alexander",
+                "KA": "Ruslan Cherenkov",
+                "SA": "Test"
+            }
+            confirm_text = (
+                f"📋 **ЗАДАЧА #{task_id} ВЗЯТА В РАБОТУ**\n\n"
+                f"📝 **{task['title']}**\n\n"
+                f"📄 **Описание:**\n{task.get('description', 'Нет описания')}\n\n"
+                f"⏰ Срок: {task.get('deadline', 'Не указан')}\n"
+                f"👤 Исполнитель: {assignee_names.get(assignee, assignee)}"
+            )
             await context.bot.send_message(
                 chat_id=user_id,
-                text=confirm_text
+                text=confirm_text,
+                parse_mode='Markdown'
             )
         except Exception as e:
-            logger.error(f"Ошибка отправки подтверждения пользователю: {e}", exc_info=True)
+            logger.error(f"Ошибка отправки описания задачи пользователю: {e}", exc_info=True)
         
         logger.info(f"Задача #{task_id} взята в работу пользователем @{username} ({assignee})")
         
@@ -783,6 +829,38 @@ async def handle_work_task_done(query, data: str, context: ContextTypes.DEFAULT_
             completed_at=datetime.now().isoformat()
         )
         
+        # Отправляем уведомление в общий чат
+        try:
+            chat_id = context.bot_data.get('CHAT_ID')
+            if not chat_id:
+                import os
+                chat_id = os.getenv('CHAT_ID', '').strip()
+            
+            if chat_id:
+                chat_id = int(chat_id) if isinstance(chat_id, str) else chat_id
+                assignee_names = {
+                    "AG": "Lysenko Alexander",
+                    "KA": "Ruslan Cherenkov",
+                    "SA": "Test"
+                }
+                assignee_name = assignee_names.get(assignee, assignee)
+                
+                completion_text = (
+                    f"✅ **ЗАДАЧА ЗАВЕРШЕНА**\n\n"
+                    f"📝 Задача: {task['title']}\n"
+                    f"👤 Исполнитель: {assignee_name}\n"
+                    f"🆔 ID задачи: #{task_id}\n"
+                    f"🕐 Время: {datetime.now().strftime('%H:%M')}"
+                )
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=completion_text,
+                    parse_mode='Markdown'
+                )
+                logger.info(f"Уведомление о завершении задачи #{task_id} отправлено в общий чат {chat_id}")
+        except Exception as e:
+            logger.error(f"Ошибка отправки уведомления в общий чат: {e}", exc_info=True)
+        
         # Уведомляем администратора
         try:
             admin_id = context.bot_data.get('admin_id')
@@ -824,8 +902,14 @@ async def handle_work_task_done(query, data: str, context: ContextTypes.DEFAULT_
                     for button in row:
                         # Если это кнопка для этого исполнителя - заменяем на "✅ Выполнено"
                         if f"work_take_{task_id}_{assignee}" in button.callback_data or f"work_done_{task_id}_{assignee}" in button.callback_data:
+                            assignee_names = {
+                                "AG": "Lysenko Alexander",
+                                "KA": "Ruslan Cherenkov",
+                                "SA": "Test"
+                            }
+                            assignee_name = assignee_names.get(assignee, assignee)
                             new_row.append(InlineKeyboardButton(
-                                f"✅ {assignee} - Выполнено",
+                                f"✅ {assignee_name} - Выполнено",
                                 callback_data=f"work_status_{task_id}_{assignee}"
                             ))
                         else:

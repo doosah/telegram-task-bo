@@ -345,9 +345,9 @@ async def finish_create_task(update: Update, context: ContextTypes.DEFAULT_TYPE)
         
         if task_id:
             assignee_names = {
-                "AG": "АГ",
-                "KA": "КА",
-                "SA": "СА",
+                "AG": "Lysenko Alexander",
+                "KA": "Ruslan Cherenkov",
+                "SA": "Test",
                 "all": "Все"
             }
             
@@ -396,13 +396,14 @@ async def finish_create_task(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     work_buttons = []
                     if assignee == "all":
                         # Если исполнитель "Все", показываем кнопки для всех
+                        # Используем правильные коды: AG, KA, SA
                         work_buttons = [
-                            [InlineKeyboardButton("👤 АГ - Взять в работу", callback_data=f"work_take_{task_id}_AG")],
-                            [InlineKeyboardButton("✅ АГ - Готово", callback_data=f"work_done_{task_id}_AG")],
-                            [InlineKeyboardButton("👤 КА - Взять в работу", callback_data=f"work_take_{task_id}_KA")],
-                            [InlineKeyboardButton("✅ КА - Готово", callback_data=f"work_done_{task_id}_KA")],
-                            [InlineKeyboardButton("👤 СА - Взять в работу", callback_data=f"work_take_{task_id}_SA")],
-                            [InlineKeyboardButton("✅ СА - Готово", callback_data=f"work_done_{task_id}_SA")]
+                            [InlineKeyboardButton("👤 Lysenko Alexander - Взять в работу", callback_data=f"work_take_{task_id}_AG")],
+                            [InlineKeyboardButton("✅ Lysenko Alexander - Готово", callback_data=f"work_done_{task_id}_AG")],
+                            [InlineKeyboardButton("👤 Ruslan Cherenkov - Взять в работу", callback_data=f"work_take_{task_id}_KA")],
+                            [InlineKeyboardButton("✅ Ruslan Cherenkov - Готово", callback_data=f"work_done_{task_id}_KA")],
+                            [InlineKeyboardButton("👤 Test - Взять в работу", callback_data=f"work_take_{task_id}_SA")],
+                            [InlineKeyboardButton("✅ Test - Готово", callback_data=f"work_done_{task_id}_SA")]
                         ]
                     else:
                         # Если конкретный исполнитель, показываем две кнопки
@@ -756,9 +757,9 @@ async def receive_edit_assignee(update: Update, context: ContextTypes.DEFAULT_TY
         )
         
         assignee_names = {
-            "AG": "АГ",
-            "KA": "КА",
-            "SA": "СА",
+            "AG": "Lysenko Alexander",
+            "KA": "Ruslan Cherenkov",
+            "SA": "Test",
             "all": "Все"
         }
         

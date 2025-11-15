@@ -184,9 +184,9 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Сохраняем пользователя в БД
         if user.username:
             user_mapping = {
-                "alex301182": {"initials": "AG", "name": "АГ"},
-                "Korudirp": {"initials": "KA", "name": "КА"},
-                "sanya_hui_sosi1488": {"initials": "SA", "name": "СА"}
+                "alex301182": {"initials": "GA", "name": "ГА", "full_name": "Lysenko Alexander"},
+                "Korudirp": {"initials": "К", "name": "К", "full_name": "Cherenkov Ruslan"},
+                "sanya_hui_sosi1488": {"initials": "С", "name": "С", "full_name": "Test"}
             }
             if user.username in user_mapping:
                 db.save_user_id(user.username, user.id, user_mapping[user.username]["initials"])
@@ -754,9 +754,9 @@ async def send_reminders(app: Application):
     
     # Получаем невыполненные задачи для каждого пользователя
     user_mapping = {
-        "AG": {"username": "alex301182", "initials": "АГ"},
-        "KA": {"username": "Korudirp", "initials": "КА"},
-        "SA": {"username": "sanya_hui_sosi1488", "initials": "СА"}
+        "GA": {"username": "alex301182", "initials": "ГА"},
+        "К": {"username": "Korudirp", "initials": "К"},
+        "С": {"username": "sanya_hui_sosi1488", "initials": "С"}
     }
     
     # Собираем невыполненные задачи для каждого пользователя
@@ -844,24 +844,24 @@ async def send_evening_summary(app: Application):
         for i, task in enumerate(day_tasks, 1):
             task_id = f"{today}_{i}"
             try:
-                status_ag = db.get_task_status(f"{task_id}_AG")
-                status_ka = db.get_task_status(f"{task_id}_KA")
-                status_sa = db.get_task_status(f"{task_id}_SA")
+                status_ga = db.get_task_status(f"{task_id}_GA")
+                status_k = db.get_task_status(f"{task_id}_К")
+                status_s = db.get_task_status(f"{task_id}_С")
             except Exception as e:
                 logger.error(f"Ошибка получения статусов для задачи {task_id}: {e}", exc_info=True)
                 # Используем дефолтные статусы
-                status_ag = "⚪"
-                status_ka = "⚪"
-                status_sa = "⚪"
+                status_ga = "⚪"
+                status_k = "⚪"
+                status_s = "⚪"
             
             # Задача невыполнена, если хотя бы один не выполнил
-            if status_ag != "✅" or status_ka != "✅" or status_sa != "✅":
+            if status_ga != "✅" or status_k != "✅" or status_s != "✅":
                 users_needed = []
-                if status_ag != "✅":
+                if status_ga != "✅":
                     users_needed.append("@alex301182")
-                if status_ka != "✅":
+                if status_k != "✅":
                     users_needed.append("@Korudirp")
-                if status_sa != "✅":
+                if status_s != "✅":
                     users_needed.append("@sanya_hui_sosi1488")
                 
                 incomplete.append({

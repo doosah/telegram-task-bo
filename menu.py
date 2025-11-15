@@ -135,11 +135,11 @@ def get_assignee_menu() -> InlineKeyboardMarkup:
     """Меню выбора исполнителя"""
     keyboard = [
         [
-            InlineKeyboardButton("👤 АГ (alex301182)", callback_data="assignee_AG"),
-            InlineKeyboardButton("👤 КА (Korudirp)", callback_data="assignee_KA")
+            InlineKeyboardButton("👤 Lysenko Alexander", callback_data="assignee_AG"),
+            InlineKeyboardButton("👤 Ruslan Cherenkov", callback_data="assignee_KA")
         ],
         [
-            InlineKeyboardButton("👤 СА (sanya_hui_sosi1488)", callback_data="assignee_SA"),
+            InlineKeyboardButton("👤 Test", callback_data="assignee_SA"),
             InlineKeyboardButton("👥 Все", callback_data="assignee_all")
         ],
         [
