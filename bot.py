@@ -794,7 +794,7 @@ def main():
             start_complete_task, receive_complete_result, receive_complete_photo,
             skip_complete_result, skip_complete_photo, complete_fast, cancel_complete_task,
             WORK_RESULT, WORK_PHOTO,
-            start_work_task, receive_work_result, receive_work_photo,
+            start_work_task, work_done_button, receive_work_result, receive_work_photo,
             skip_work_result, skip_work_photo, cancel_work_task
         )
         
@@ -898,13 +898,13 @@ def main():
         # Регистрируем ConversationHandler для работы с задачей (Взять в работу)
         work_task_conv = ConversationHandler(
             entry_points=[
-                CallbackQueryHandler(start_work_task, pattern="^work_task_[0-9]+_(AG|KA|SA)$")
+                CallbackQueryHandler(start_work_task, pattern="^work_task_[0-9]+_(AG|KA|SA)$"),
+                CallbackQueryHandler(work_done_button, pattern="^work_done$")
             ],
             states={
                 WORK_RESULT: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, receive_work_result),
-                    CallbackQueryHandler(skip_work_result, pattern="^skip_work_result$"),
-                    CallbackQueryHandler(receive_work_result, pattern="^work_done$")
+                    CallbackQueryHandler(skip_work_result, pattern="^skip_work_result$")
                 ],
                 WORK_PHOTO: [
                     MessageHandler(filters.PHOTO | filters.VIDEO | filters.Document.ALL, receive_work_photo),
