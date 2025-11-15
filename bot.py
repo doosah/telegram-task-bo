@@ -111,19 +111,31 @@ async def add_urgent_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         
         # Отправляем задачу в группу
         keyboard = create_task_keyboard(urgent_task, "urgent")
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text=f"🔥 **ВНЕПЛАНОВАЯ ЗАДАЧА**\n\n{urgent_task}",
-            reply_markup=keyboard,
-            parse_mode='Markdown'
-        )
+        
+        logger.info(f"Создание клавиатуры для задачи: {urgent_task}")
+        
+        try:
+            msg = await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"🔥 **ВНЕПЛАНОВАЯ ЗАДАЧА**\n\n{urgent_task}",
+                reply_markup=keyboard,
+                parse_mode='Markdown'
+            )
+            logger.info(f"✅ Срочная задача успешно отправлена в чат {chat_id}. Message ID: {msg.message_id}")
+        except Exception as send_error:
+            logger.error(f"❌ ОШИБКА отправки сообщения в чат {chat_id}: {send_error}")
+            logger.error(f"   Тип ошибки: {type(send_error).__name__}")
+            raise
         
         await update.message.reply_text(f"✅ Задача добавлена в группу!")
-        logger.info("Срочная задача успешно отправлена")
+        logger.info("Подтверждение отправлено пользователю")
     except Exception as e:
         error_msg = f"❌ Ошибка отправки задачи: {e}"
-        logger.error(f"Ошибка в add_urgent_command: {e}", exc_info=True)
-        await update.message.reply_text(error_msg)
+        logger.error(f"❌ КРИТИЧЕСКАЯ ОШИБКА в add_urgent_command: {e}", exc_info=True)
+        try:
+            await update.message.reply_text(error_msg)
+        except:
+            pass
 
 
 async def force_morning_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
