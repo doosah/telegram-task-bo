@@ -113,8 +113,7 @@ async def add_urgent_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 "Пример: /add_urgent Проверить отчет"
             )
             return
-    
-    try:
+        
         task_text = " ".join(context.args)
         urgent_task = f"🔥 {task_text}"
         
