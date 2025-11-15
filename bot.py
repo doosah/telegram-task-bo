@@ -360,73 +360,73 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Извлекаем номер задачи из task_id (формат: "0_1" -> номер "1")
         task_num = task_id.split("_")[-1] if "_" in task_id else task_id
-            
-            # Ищем текст задачи из кнопки (это надежнее)
-            task_text = ""
-            original_button_text = ""
-            
-            for row in current_markup.inline_keyboard:
-                for button in row:
-                    if button.callback_data == f"task_{task_id}":
-                        original_button_text = button.text
-                        # Извлекаем текст задачи из кнопки
-                        # Формат: "1. Название задачи ⚪"
-                        if "." in original_button_text:
-                            # Разделяем на номер и остальное
-                            parts_btn = original_button_text.split(".", 1)
-                            task_text = parts_btn[1].strip() if len(parts_btn) > 1 else original_button_text
-                            # Убираем статусы
-                            task_text = task_text.replace("⚪", "").replace("⏳", "").replace("✅", "").strip()
-                        else:
-                            task_text = original_button_text.replace("⚪", "").replace("⏳", "").replace("✅", "").strip()
-                        logger.info(f"Текст задачи из кнопки: '{task_text}'")
-                        break
-                if task_text:
-                    break
-            
-            # Если не нашли в кнопке - ищем в тексте сообщения
-            if not task_text:
-                message_text = query.message.text or ""
-                for line in message_text.split("\n"):
-                    line_stripped = line.strip()
-                    if line_stripped.startswith(f"{task_num}."):
-                        task_text = line_stripped
-                        if "." in task_text:
-                            task_text = task_text.split(".", 1)[1].strip()
-                        task_text = task_text.replace("⚪", "").replace("⏳", "").replace("✅", "").replace("**", "").strip()
-                        logger.info(f"Текст задачи из сообщения: '{task_text}'")
-                        break
-            
-            if not task_text:
-                logger.error(f"Не удалось извлечь текст задачи для {task_id}")
-                # Используем дефолтный текст
-                task_text = f"Задача {task_num}" if task_num else "Задача"
-                logger.warning(f"Используем дефолтный текст задачи: {task_text}")
-            
-            # Обновляем кнопки в текущей клавиатуре
-            new_keyboard = []
-            for row in current_markup.inline_keyboard:
-                new_row = []
-                for button in row:
-                    # Если это кнопка для нашей задачи - обновляем статус
-                    if button.callback_data == f"task_{task_id}":
-                        # Сохраняем номер задачи в новом тексте
-                        new_text = f"{task_num}. {task_text} {task_status}"
-                        logger.info(f"Обновляем кнопку: '{original_button_text}' → '{new_text}'")
-                        new_row.append(InlineKeyboardButton(new_text, callback_data=button.callback_data))
+        
+        # Ищем текст задачи из кнопки (это надежнее)
+        task_text = ""
+        original_button_text = ""
+        
+        for row in current_markup.inline_keyboard:
+            for button in row:
+                if button.callback_data == f"task_{task_id}":
+                    original_button_text = button.text
+                    # Извлекаем текст задачи из кнопки
+                    # Формат: "1. Название задачи ⚪"
+                    if "." in original_button_text:
+                        # Разделяем на номер и остальное
+                        parts_btn = original_button_text.split(".", 1)
+                        task_text = parts_btn[1].strip() if len(parts_btn) > 1 else original_button_text
+                        # Убираем статусы
+                        task_text = task_text.replace("⚪", "").replace("⏳", "").replace("✅", "").strip()
                     else:
-                        new_row.append(button)
-                new_keyboard.append(new_row)
-            
-            updated_keyboard = InlineKeyboardMarkup(new_keyboard)
-            try:
-                await query.edit_message_reply_markup(reply_markup=updated_keyboard)
-                logger.info(f"✅ Кнопка обновлена успешно")
-            except Exception as e:
-                logger.error(f"❌ Ошибка обновления кнопки: {type(e).__name__}: {e}", exc_info=True)
-                # Не падаем, просто логируем ошибку
-                # Возможно, сообщение было изменено другим пользователем
-                pass
+                        task_text = original_button_text.replace("⚪", "").replace("⏳", "").replace("✅", "").strip()
+                    logger.info(f"Текст задачи из кнопки: '{task_text}'")
+                    break
+            if task_text:
+                break
+        
+        # Если не нашли в кнопке - ищем в тексте сообщения
+        if not task_text:
+            message_text = query.message.text or ""
+            for line in message_text.split("\n"):
+                line_stripped = line.strip()
+                if line_stripped.startswith(f"{task_num}."):
+                    task_text = line_stripped
+                    if "." in task_text:
+                        task_text = task_text.split(".", 1)[1].strip()
+                    task_text = task_text.replace("⚪", "").replace("⏳", "").replace("✅", "").replace("**", "").strip()
+                    logger.info(f"Текст задачи из сообщения: '{task_text}'")
+                    break
+        
+        if not task_text:
+            logger.error(f"Не удалось извлечь текст задачи для {task_id}")
+            # Используем дефолтный текст
+            task_text = f"Задача {task_num}" if task_num else "Задача"
+            logger.warning(f"Используем дефолтный текст задачи: {task_text}")
+        
+        # Обновляем кнопки в текущей клавиатуре
+        new_keyboard = []
+        for row in current_markup.inline_keyboard:
+            new_row = []
+            for button in row:
+                # Если это кнопка для нашей задачи - обновляем статус
+                if button.callback_data == f"task_{task_id}":
+                    # Сохраняем номер задачи в новом тексте
+                    new_text = f"{task_num}. {task_text} {task_status}"
+                    logger.info(f"Обновляем кнопку: '{original_button_text}' → '{new_text}'")
+                    new_row.append(InlineKeyboardButton(new_text, callback_data=button.callback_data))
+                else:
+                    new_row.append(button)
+            new_keyboard.append(new_row)
+        
+        updated_keyboard = InlineKeyboardMarkup(new_keyboard)
+        try:
+            await query.edit_message_reply_markup(reply_markup=updated_keyboard)
+            logger.info(f"✅ Кнопка обновлена успешно")
+        except Exception as e:
+            logger.error(f"❌ Ошибка обновления кнопки: {type(e).__name__}: {e}", exc_info=True)
+            # Не падаем, просто логируем ошибку
+            # Возможно, сообщение было изменено другим пользователем
+            pass
         
         # Отправляем подтверждение (если еще не было отправлено)
         try:
