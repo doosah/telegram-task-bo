@@ -778,6 +778,32 @@ def main():
         application.add_handler(edit_task_conv)
         logger.info("ConversationHandler для редактирования задач зарегистрирован")
         
+        complete_task_conv = ConversationHandler(
+            entry_points=[
+                CallbackQueryHandler(start_complete_task, pattern="^task_complete_"),
+                CallbackQueryHandler(complete_fast, pattern="^task_complete_fast_")
+            ],
+            states={
+                COMPLETE_RESULT: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, receive_complete_result),
+                    CallbackQueryHandler(skip_complete_result, pattern="^skip_complete_result$"),
+                    CallbackQueryHandler(complete_fast, pattern="^complete_fast$")
+                ],
+                COMPLETE_PHOTO: [
+                    MessageHandler(filters.PHOTO, receive_complete_photo),
+                    CallbackQueryHandler(skip_complete_photo, pattern="^skip_complete_photo$")
+                ]
+            },
+            fallbacks=[
+                CallbackQueryHandler(cancel_complete_task, pattern="^cancel_complete_task$"),
+                CommandHandler("cancel", cancel_complete_task)
+            ],
+            name="complete_task_conversation"
+        )
+        
+        application.add_handler(complete_task_conv)
+        logger.info("ConversationHandler для завершения задач зарегистрирован")
+        
         # Настраиваем расписание
         setup_scheduler(application)
         logger.info("Расписание настроено")
