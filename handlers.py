@@ -32,13 +32,9 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
             await query.edit_message_text(text, reply_markup=get_main_menu(), parse_mode='Markdown')
         
         elif data == "menu_create_task":
-            text = (
-                "📝 **СОЗДАНИЕ ЗАДАЧИ**\n\n"
-                "Введите название задачи:"
-            )
-            context.user_data['creating_task'] = {}
-            await query.edit_message_text(text, parse_mode='Markdown')
-            # Здесь нужно будет использовать ConversationHandler
+            # ConversationHandler обработает это через entry_points
+            # Просто подтверждаем нажатие
+            await query.answer("Начинаем создание задачи...")
         
         elif data == "menu_view_tasks":
             from menu import get_tasks_menu, get_main_menu

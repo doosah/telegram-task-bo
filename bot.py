@@ -703,6 +703,44 @@ def main():
         application.add_handler(CallbackQueryHandler(button_callback))
         logger.info("Обработчик кнопок зарегистрирован")
         
+        # Регистрируем ConversationHandler для создания задач
+        from conversations import (
+            TITLE, DESCRIPTION, DEADLINE, ASSIGNEE,
+            start_create_task, receive_title, receive_description, receive_deadline, receive_assignee,
+            skip_description, skip_deadline, cancel_create_task
+        )
+        
+        create_task_conv = ConversationHandler(
+            entry_points=[
+                CallbackQueryHandler(start_create_task, pattern="^menu_create_task$")
+            ],
+            states={
+                TITLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_title)],
+                DESCRIPTION: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, receive_description),
+                    CallbackQueryHandler(skip_description, pattern="^skip_description$")
+                ],
+                DEADLINE: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, receive_deadline),
+                    CallbackQueryHandler(skip_deadline, pattern="^skip_deadline$")
+                ],
+                ASSIGNEE: [
+                    CallbackQueryHandler(
+                        receive_assignee,
+                        pattern="^assignee_"
+                    )
+                ]
+            },
+            fallbacks=[
+                CallbackQueryHandler(cancel_create_task, pattern="^cancel_create_task$"),
+                CommandHandler("cancel", cancel_create_task)
+            ],
+            name="create_task_conversation"
+        )
+        
+        application.add_handler(create_task_conv)
+        logger.info("ConversationHandler для создания задач зарегистрирован")
+        
         # Настраиваем расписание
         setup_scheduler(application)
         logger.info("Расписание настроено")

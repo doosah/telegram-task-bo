@@ -225,4 +225,125 @@ class Database:
             # Логируем ошибку, но не падаем
             logger_db.error(f"Ошибка получения ID пользователя {username}: {e}", exc_info=True)
             return None
+    
+    def save_custom_task(self, title: str, description: str, deadline: str, assignee: str, creator: str) -> int:
+        """Сохраняет новую задачу, созданную через меню"""
+        try:
+            with db_lock:
+                conn = self.get_connection()
+                cursor = conn.cursor()
+                from datetime import datetime
+                created_at = datetime.now().isoformat()
+                cursor.execute('''
+                    INSERT INTO custom_tasks (title, description, deadline, assignee, creator, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                ''', (title, description, deadline, assignee, creator, created_at))
+                task_id = cursor.lastrowid
+                conn.commit()
+                conn.close()
+                logger_db.info(f"Задача #{task_id} сохранена: {title}")
+                return task_id
+        except Exception as e:
+            logger_db.error(f"Ошибка сохранения новой задачи: {e}", exc_info=True)
+            return None
+    
+    def get_custom_tasks(self, status: str = None) -> list:
+        """Получает список новых задач"""
+        try:
+            with db_lock:
+                conn = self.get_connection()
+                cursor = conn.cursor()
+                if status:
+                    cursor.execute('SELECT * FROM custom_tasks WHERE status = ?', (status,))
+                else:
+                    cursor.execute('SELECT * FROM custom_tasks')
+                tasks = []
+                for row in cursor.fetchall():
+                    tasks.append({
+                        'task_id': row[0], 'title': row[1], 'description': row[2],
+                        'deadline': row[3], 'assignee': row[4], 'creator': row[5],
+                        'status': row[6], 'created_at': row[7], 'completed_at': row[8],
+                        'result_text': row[9], 'result_photo': row[10]
+                    })
+                conn.close()
+                return tasks
+        except Exception as e:
+            logger_db.error(f"Ошибка получения списка задач: {e}", exc_info=True)
+            return []
+    
+    def get_custom_task(self, task_id: int) -> dict:
+        """Получает одну новую задачу по ID"""
+        try:
+            with db_lock:
+                conn = self.get_connection()
+                cursor = conn.cursor()
+                cursor.execute('SELECT * FROM custom_tasks WHERE task_id = ?', (task_id,))
+                row = cursor.fetchone()
+                conn.close()
+                if row:
+                    return {
+                        'task_id': row[0], 'title': row[1], 'description': row[2],
+                        'deadline': row[3], 'assignee': row[4], 'creator': row[5],
+                        'status': row[6], 'created_at': row[7], 'completed_at': row[8],
+                        'result_text': row[9], 'result_photo': row[10]
+                    }
+                return None
+        except Exception as e:
+            logger_db.error(f"Ошибка получения задачи {task_id}: {e}", exc_info=True)
+            return None
+    
+    def update_custom_task(self, task_id: int, **kwargs):
+        """Обновляет поля новой задачи"""
+        try:
+            with db_lock:
+                conn = self.get_connection()
+                cursor = conn.cursor()
+                set_clauses = []
+                values = []
+                for key, value in kwargs.items():
+                    set_clauses.append(f"{key} = ?")
+                    values.append(value)
+                
+                if set_clauses:
+                    values.append(task_id)
+                    query = f"UPDATE custom_tasks SET {', '.join(set_clauses)} WHERE task_id = ?"
+                    cursor.execute(query, tuple(values))
+                    conn.commit()
+                conn.close()
+                logger_db.info(f"Задача #{task_id} обновлена: {list(kwargs.keys())}")
+        except Exception as e:
+            logger_db.error(f"Ошибка обновления задачи {task_id}: {e}", exc_info=True)
+    
+    def delete_custom_task(self, task_id: int):
+        """Удаляет новую задачу"""
+        try:
+            with db_lock:
+                conn = self.get_connection()
+                cursor = conn.cursor()
+                cursor.execute('DELETE FROM custom_tasks WHERE task_id = ?', (task_id,))
+                conn.commit()
+                conn.close()
+                logger_db.info(f"Задача #{task_id} удалена")
+        except Exception as e:
+            logger_db.error(f"Ошибка удаления задачи {task_id}: {e}", exc_info=True)
+    
+    def save_presence(self, username: str, user_id: int, status: str, time: str = None, delay_minutes: int = None, reason: str = None):
+        """Сохраняет отметку присутствия"""
+        try:
+            with db_lock:
+                conn = self.get_connection()
+                cursor = conn.cursor()
+                from datetime import datetime
+                date_str = datetime.now().strftime("%Y-%m-%d")
+                created_at = datetime.now().isoformat()
+                
+                cursor.execute('''
+                    INSERT OR REPLACE INTO presence (username, user_id, date, status, time, delay_minutes, reason, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (username, user_id, date_str, status, time, delay_minutes, reason, created_at))
+                conn.commit()
+                conn.close()
+                logger_db.info(f"Отметка присутствия сохранена для {username}: {status}")
+        except Exception as e:
+            logger_db.error(f"Ошибка сохранения отметки присутствия для {username}: {e}", exc_info=True)
 
