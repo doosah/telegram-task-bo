@@ -98,8 +98,18 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
             try:
                 await query.answer("⏳ Отправка задач...")
                 
-                # Импортируем функцию напрямую из bot.py
-                from bot import send_morning_tasks
+                # Используем функцию из bot_data или импортируем напрямую
+                if 'send_morning_tasks' in context.bot_data:
+                    send_morning_tasks_func = context.bot_data['send_morning_tasks']
+                else:
+                    # Если нет в bot_data, импортируем напрямую
+                    import sys
+                    import importlib
+                    if 'bot' in sys.modules:
+                        bot_module = sys.modules['bot']
+                        send_morning_tasks_func = bot_module.send_morning_tasks
+                    else:
+                        raise ImportError("Не удалось найти функцию send_morning_tasks")
                 
                 # Создаем обертку для app, как в force_morning_command
                 class AppWrapper:
@@ -108,8 +118,8 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
                 
                 app_wrapper = AppWrapper(context.bot)
                 
-                # Вызываем функцию напрямую
-                await send_morning_tasks(app_wrapper, force_weekend=True)
+                # Вызываем функцию
+                await send_morning_tasks_func(app_wrapper, force_weekend=True)
                 
                 text = "✅ **ЕЖЕДНЕВНЫЕ ЗАДАЧИ**\n\nЗадачи успешно отправлены в группу!"
                 
@@ -133,8 +143,17 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
             try:
                 await query.answer("⏳ Отправка кнопок...")
                 
-                # Импортируем функцию напрямую из bot.py
-                from bot import send_presence_buttons
+                # Используем функцию из bot_data или импортируем напрямую
+                if 'send_presence_buttons' in context.bot_data:
+                    send_presence_buttons_func = context.bot_data['send_presence_buttons']
+                else:
+                    # Если нет в bot_data, импортируем напрямую
+                    import sys
+                    if 'bot' in sys.modules:
+                        bot_module = sys.modules['bot']
+                        send_presence_buttons_func = bot_module.send_presence_buttons
+                    else:
+                        raise ImportError("Не удалось найти функцию send_presence_buttons")
                 
                 # Создаем обертку для app
                 class AppWrapper:
@@ -143,8 +162,8 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
                 
                 app_wrapper = AppWrapper(context.bot)
                 
-                # Вызываем функцию напрямую
-                await send_presence_buttons(app_wrapper)
+                # Вызываем функцию
+                await send_presence_buttons_func(app_wrapper)
                 
                 text = "✅ **КОНТРОЛЬ СОТРУДНИКОВ**\n\nКнопки 'На рабочем месте' и 'Опаздываю' отправлены в группу!"
                 
