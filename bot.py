@@ -5,8 +5,8 @@
 
 import os
 import logging
-import asyncio
-from datetime import datetime, time
+import time as time_module
+from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
@@ -30,14 +30,19 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Получаем данные из переменных окружения (секретные данные)
-# Очищаем от пробелов и невидимых символов
-BOT_TOKEN = os.getenv('BOT_TOKEN', '8448041977:AAGa4-EZ9dTfn-GgYArZU83FteWfisBOEUo').strip()
-CHAT_ID = os.getenv('CHAT_ID', '-1003107822060').strip()
-ADMIN_USERNAME = os.getenv('ADMIN_USERNAME', 'Doosahyasno').strip()
+# ВАЖНО: В production НЕ используйте дефолтные значения!
+# Все значения должны быть установлены через переменные окружения
+BOT_TOKEN = os.getenv('BOT_TOKEN', '').strip()
+CHAT_ID = os.getenv('CHAT_ID', '').strip()
+ADMIN_USERNAME = os.getenv('ADMIN_USERNAME', '').strip()
 
-# Проверяем токен на валидность
+# Проверяем все обязательные переменные
 if not BOT_TOKEN or len(BOT_TOKEN) < 10:
-    raise ValueError("BOT_TOKEN is invalid or empty!")
+    raise ValueError("BOT_TOKEN is invalid or empty! Set it via environment variable.")
+if not CHAT_ID:
+    raise ValueError("CHAT_ID is empty! Set it via environment variable.")
+if not ADMIN_USERNAME:
+    raise ValueError("ADMIN_USERNAME is empty! Set it via environment variable.")
 
 # Инициализация базы данных и задач
 db = Database()
@@ -146,13 +151,20 @@ async def add_urgent_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def force_morning_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /force_morning - отправить задачи прямо сейчас"""
-    user = update.effective_user
-    
-    # Проверяем, что команду запускает админ
-    if user.username != ADMIN_USERNAME:
-        await update.message.reply_text(
-            "❌ У вас нет прав для использования этой команды."
-        )
+    try:
+        user = update.effective_user
+        if not user:
+            logger.error("user is None in force_morning_command")
+            return
+        
+        # Проверяем, что команду запускает админ
+        if user.username != ADMIN_USERNAME:
+            await update.message.reply_text(
+                "❌ У вас нет прав для использования этой команды."
+            )
+            return
+    except Exception as e:
+        logger.error(f"Ошибка проверки прав в force_morning_command: {e}", exc_info=True)
         return
     
     try:
@@ -183,14 +195,31 @@ def create_task_keyboard(task_text: str, task_id: str) -> InlineKeyboardMarkup:
     # Реальный статус будет загружен и обновлен при нажатии кнопки
     task_status = "⚪"
     
+    # Валидация: Telegram ограничивает callback_data до 64 байт
+    callback_data = f"task_{task_id}"
+    if len(callback_data.encode('utf-8')) > 64:
+        logger.error(f"⚠️ callback_data слишком длинный: {len(callback_data.encode('utf-8'))} байт")
+        # Укорачиваем task_id если нужно
+        max_task_id_len = 64 - len("task_".encode('utf-8'))
+        task_id = task_id[:max_task_id_len]
+        callback_data = f"task_{task_id}"
+        logger.warning(f"Укорочен task_id до: {task_id}")
+    
     # Создаем одну кнопку с названием задачи и статусом
+    # Валидация: Telegram ограничивает текст кнопки до 64 символов
     button_text = f"{task_text} {task_status}"
+    if len(button_text) > 64:
+        # Укорачиваем текст задачи
+        max_text_len = 64 - len(f" {task_status}")
+        task_text_short = task_text[:max_text_len-3] + "..."
+        button_text = f"{task_text_short} {task_status}"
+        logger.warning(f"Текст кнопки укорочен до 64 символов")
     
     buttons = [
         [
             InlineKeyboardButton(
                 button_text,
-                callback_data=f"task_{task_id}"
+                callback_data=callback_data
             )
         ]
     ]
@@ -459,7 +488,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Возможно, сообщение было изменено другим пользователем
             pass
         
-        # Отправляем подтверждение (если еще не было отправлено)
+        # Отправляем подтверждение (query.answer уже был вызван в начале, но это второй вызов для уведомления)
+        # Telegram позволяет вызывать answer несколько раз, но показывается только последний
         try:
             if task_status == "✅":
                 await query.answer(f"✅ Задача выполнена! (все участники)", show_alert=False)
@@ -468,6 +498,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             logger.warning(f"Не удалось отправить подтверждение: {e}")
             # Это не критично, просто логируем
+            # query.answer уже был вызван в начале функции
             
     except Exception as e:
         logger.error(f"❌ КРИТИЧЕСКАЯ ОШИБКА в button_callback: {type(e).__name__}: {e}", exc_info=True)
@@ -526,13 +557,37 @@ async def send_morning_tasks(app, force_weekend=False):
         
         for i, task in enumerate(day_tasks, 1):
             task_id = f"{today}_{i}"
-            message_text += f"{i}. {task}\n"
+            task_line = f"{i}. {task}\n"
+            
+            # Проверяем, не превысит ли сообщение лимит (4096 символов)
+            if estimated_length + len(task_line) > 4000:  # Оставляем запас
+                logger.warning(f"⚠️ Сообщение слишком длинное, останавливаемся на задаче {i-1}")
+                break
+            
+            message_text += task_line
+            estimated_length += len(task_line)
+            
+            # Валидация callback_data (Telegram ограничивает до 64 байт)
+            callback_data = f"task_{task_id}"
+            if len(callback_data.encode('utf-8')) > 64:
+                logger.error(f"⚠️ callback_data слишком длинный для задачи {i}: {len(callback_data.encode('utf-8'))} байт")
+                # Пропускаем эту задачу
+                continue
+            
+            # Валидация текста кнопки (Telegram ограничивает до 64 символов)
+            button_text = f"{i}. {task} ⚪"
+            if len(button_text) > 64:
+                # Укорачиваем текст задачи
+                max_text_len = 64 - len(f"{i}. ⚪")
+                task_short = task[:max_text_len-3] + "..."
+                button_text = f"{i}. {task_short} ⚪"
+                logger.warning(f"Текст кнопки для задачи {i} укорочен до 64 символов")
             
             # Добавляем ОДНУ кнопку для этой задачи
             all_buttons.append([
                 InlineKeyboardButton(
-                    f"{i}. {task} ⚪",
-                    callback_data=f"task_{task_id}"
+                    button_text,
+                    callback_data=callback_data
                 )
             ])
         
@@ -605,11 +660,21 @@ async def send_reminders(app: Application):
             continue
         
         # Формируем сообщение для пользователя
+        # Валидация: Telegram ограничивает длину сообщения до 4096 символов
         message = f"⏰ **НАПОМИНАНИЕ**\n\n"
         message += f"У вас есть невыполненные задачи:\n\n"
         
+        max_message_length = 4000  # Оставляем запас
+        current_length = len(message)
+        
         for i, task in enumerate(incomplete_tasks, 1):
-            message += f"{i}. {task}\n"
+            task_line = f"{i}. {task}\n"
+            if current_length + len(task_line) > max_message_length:
+                message += f"\n... и еще {len(incomplete_tasks) - i + 1} задач"
+                logger.warning(f"Сообщение для {user_info['username']} обрезано из-за лимита длины")
+                break
+            message += task_line
+            current_length += len(task_line)
         
         # Получаем ID пользователя из базы данных
         try:

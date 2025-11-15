@@ -5,7 +5,11 @@
 
 import sqlite3
 import os
+import logging
 from threading import Lock
+
+# Настройка логирования для модуля database
+logger_db = logging.getLogger(__name__)
 
 # Блокировка для безопасной работы с базой данных
 db_lock = Lock()
@@ -66,9 +70,7 @@ class Database:
                 conn.close()
         except Exception as e:
             # Логируем ошибку, но не падаем
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error(f"Ошибка инициализации БД: {e}", exc_info=True)
+            logger_db.error(f"Ошибка инициализации БД: {e}", exc_info=True)
     
     def get_task_status(self, task_key: str) -> str:
         """
@@ -119,9 +121,7 @@ class Database:
                 conn.close()
         except Exception as e:
             # Логируем ошибку, но не падаем
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error(f"Ошибка сохранения статуса {task_key}={status}: {e}", exc_info=True)
+            logger_db.error(f"Ошибка сохранения статуса {task_key}={status}: {e}", exc_info=True)
     
     def save_user_id(self, username: str, user_id: int, initials: str):
         """
@@ -144,9 +144,7 @@ class Database:
                 conn.close()
         except Exception as e:
             # Логируем ошибку, но не падаем
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error(f"Ошибка сохранения ID пользователя {username}: {e}", exc_info=True)
+            logger_db.error(f"Ошибка сохранения ID пользователя {username}: {e}", exc_info=True)
     
     def get_user_ids(self) -> list:
         """
@@ -165,9 +163,7 @@ class Database:
                 return [row[0] for row in results if row[0] is not None]
         except Exception as e:
             # Логируем ошибку, но не падаем
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error(f"Ошибка получения списка ID пользователей: {e}", exc_info=True)
+            logger_db.error(f"Ошибка получения списка ID пользователей: {e}", exc_info=True)
             return []
     
     def get_user_id_by_username(self, username: str) -> int:
@@ -194,8 +190,6 @@ class Database:
                 return None
         except Exception as e:
             # Логируем ошибку, но не падаем
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error(f"Ошибка получения ID пользователя {username}: {e}", exc_info=True)
+            logger_db.error(f"Ошибка получения ID пользователя {username}: {e}", exc_info=True)
             return None
 
