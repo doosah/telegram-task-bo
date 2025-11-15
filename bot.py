@@ -214,23 +214,31 @@ def create_task_keyboard(task_text: str, task_id: str) -> InlineKeyboardMarkup:
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка нажатий на кнопки"""
-    query = update.callback_query
-    await query.answer()
-    
     try:
+        query = update.callback_query
+        if not query:
+            logger.error("query is None")
+            return
+        
         # Парсим данные из кнопки
         data = query.data
         logger.info(f"Нажата кнопка: {data}")
         
-        if not data.startswith("task_"):
+        if not data or not data.startswith("task_"):
+            logger.warning(f"Неверный формат данных кнопки: {data}")
+            await query.answer()
             return
         
         parts = data.split("_")
         if len(parts) != 2:
+            logger.warning(f"Неверный формат task_id: {data}, parts={parts}")
+            await query.answer()
             return
         
         task_id = parts[1]
         logger.info(f"Обработка задачи: {task_id}")
+        
+        await query.answer()
         
         # Получаем пользователя
         user = query.from_user
@@ -645,11 +653,7 @@ def main():
         setup_scheduler(application)
         logger.info("Расписание настроено")
         
-        # Запускаем бота
-        logger.info("Бот запущен и готов к работе!")
-        logger.info("Ожидание команд...")
-        
-        # Добавляем обработчик ошибок Conflict
+        # Добавляем обработчик ошибок ДО запуска
         async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
             """Обработчик ошибок"""
             error = context.error
@@ -661,6 +665,11 @@ def main():
                     logger.error(f"Необработанная ошибка: {error}", exc_info=error)
         
         application.add_error_handler(error_handler)
+        logger.info("Обработчик ошибок зарегистрирован")
+        
+        # Запускаем бота
+        logger.info("Бот запущен и готов к работе!")
+        logger.info("Ожидание команд...")
         
         application.run_polling(
             allowed_updates=Update.ALL_TYPES,
