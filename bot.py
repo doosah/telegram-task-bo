@@ -559,15 +559,19 @@ async def send_morning_tasks(app, force_weekend=False):
 
 async def send_reminders(app: Application):
     """Отправка напоминаний в личные сообщения в 13:00"""
-    today = datetime.now(MOSCOW_TZ).weekday()
-    
-    if today > 4:
-        return
-    
-    # Получаем задачи на сегодня
-    day_tasks = tasks_manager.get_tasks_for_day(today)
-    
-    if not day_tasks:
+    try:
+        today = datetime.now(MOSCOW_TZ).weekday()
+        
+        if today > 4:
+            return
+        
+        # Получаем задачи на сегодня
+        day_tasks = tasks_manager.get_tasks_for_day(today)
+        
+        if not day_tasks:
+            return
+    except Exception as e:
+        logger.error(f"❌ Ошибка в начале send_reminders: {e}", exc_info=True)
         return
     
     # Получаем невыполненные задачи для каждого пользователя
@@ -581,13 +585,21 @@ async def send_reminders(app: Application):
     for initials, user_info in user_mapping.items():
         incomplete_tasks = []
         
-        for i, task in enumerate(day_tasks, 1):
-            task_id = f"{today}_{i}"
-            status_key = f"{task_id}_{initials}"
-            status = db.get_task_status(status_key)
-            
-            if status != "✅":
-                incomplete_tasks.append(task)
+        try:
+            for i, task in enumerate(day_tasks, 1):
+                task_id = f"{today}_{i}"
+                status_key = f"{task_id}_{initials}"
+                try:
+                    status = db.get_task_status(status_key)
+                except Exception as e:
+                    logger.error(f"Ошибка получения статуса {status_key}: {e}", exc_info=True)
+                    status = "⚪"
+                
+                if status != "✅":
+                    incomplete_tasks.append(task)
+        except Exception as e:
+            logger.error(f"Ошибка обработки задач для {user_info['username']}: {e}", exc_info=True)
+            continue
         
         if not incomplete_tasks:
             continue
@@ -600,7 +612,11 @@ async def send_reminders(app: Application):
             message += f"{i}. {task}\n"
         
         # Получаем ID пользователя из базы данных
-        user_id = db.get_user_id_by_username(user_info["username"])
+        try:
+            user_id = db.get_user_id_by_username(user_info["username"])
+        except Exception as e:
+            logger.error(f"Ошибка получения ID пользователя {user_info['username']}: {e}", exc_info=True)
+            user_id = None
         
         if user_id:
             try:
@@ -609,12 +625,12 @@ async def send_reminders(app: Application):
                     text=message,
                     parse_mode='Markdown'
                 )
+                logger.info(f"✅ Напоминание отправлено пользователю {user_info['username']} (ID: {user_id})")
             except Exception as e:
-                logger.error(f"Ошибка отправки напоминания пользователю {user_info['username']}: {e}")
+                logger.error(f"❌ Ошибка отправки напоминания пользователю {user_info['username']}: {type(e).__name__}: {e}", exc_info=True)
         else:
-            # Если ID еще не сохранен, пытаемся отправить через username
-            # (это не всегда работает, но попробуем)
-            logger.warning(f"ID пользователя {user_info['username']} не найден в базе данных")
+            # Если ID еще не сохранен, логируем предупреждение
+            logger.warning(f"⚠️ ID пользователя {user_info['username']} не найден в базе данных")
 
 
 async def send_evening_summary(app: Application):
