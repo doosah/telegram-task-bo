@@ -61,32 +61,29 @@ MOSCOW_TZ = pytz.timezone('Europe/Moscow')
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда /start - проверка работы бота"""
+    """Команда /start - главное меню бота"""
     try:
         user = update.effective_user
         logger.info(f"Команда /start от пользователя @{user.username} (ID: {user.id})")
         
-        # Все могут использовать /start для проверки
+        # Сохраняем пользователя в БД
+        if user.username:
+            user_mapping = {
+                "alex301182": {"initials": "AG", "name": "АГ"},
+                "Korudirp": {"initials": "KA", "name": "КА"},
+                "sanya_hui_sosi1488": {"initials": "SA", "name": "СА"}
+            }
+            if user.username in user_mapping:
+                db.save_user_id(user.username, user.id, user_mapping[user.username]["initials"])
+        
         response = (
-            f"✅ Бот работает!\n\n"
-            f"👤 Пользователь: @{user.username if user.username else 'без username'}\n"
-            f"🆔 ID: {user.id}\n"
-            f"📅 Время: {datetime.now(MOSCOW_TZ).strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+            f"👋 Добро пожаловать!\n\n"
+            f"🤖 Я бот для управления задачами\n\n"
+            f"📱 Выберите действие из меню ниже:"
         )
         
-        # Если это админ - показываем команды
-        if user.username == ADMIN_USERNAME:
-            response += (
-                f"Доступные команды:\n"
-                f"/start - проверка работы\n"
-                f"/add_urgent ТЕКСТ - добавить срочную задачу\n"
-                f"/force_morning - отправить задачи сейчас"
-            )
-        else:
-            response += "Для использования команд нужны права администратора."
-        
-        await update.message.reply_text(response)
-        logger.info(f"Ответ отправлен пользователю @{user.username}")
+        await update.message.reply_text(response, reply_markup=get_main_menu())
+        logger.info(f"Главное меню отправлено пользователю @{user.username}")
     except Exception as e:
         logger.error(f"Ошибка в start_command: {e}", exc_info=True)
         try:
@@ -878,6 +875,34 @@ async def send_evening_summary(app: Application):
         logger.info(f"✅ Итоги дня отправлены в чат {chat_id}")
     except Exception as e:
         logger.error(f"❌ Ошибка отправки итогов дня: {type(e).__name__}: {e}", exc_info=True)
+
+
+async def send_presence_buttons(app: Application):
+    """Отправка кнопок присутствия в 07:50"""
+    try:
+        today = datetime.now(MOSCOW_TZ).weekday()
+        
+        if today > 4:  # Выходной
+            return
+        
+        chat_id = int(CHAT_ID) if isinstance(CHAT_ID, str) else CHAT_ID
+        date_str = datetime.now(MOSCOW_TZ).strftime("%d.%m.%Y")
+        
+        message = (
+            f"⏰ **ОТМЕТКА ПРИСУТСТВИЯ**\n\n"
+            f"📅 Дата: {date_str}\n\n"
+            f"Пожалуйста, отметьте своё присутствие:"
+        )
+        
+        await app.bot.send_message(
+            chat_id=chat_id,
+            text=message,
+            reply_markup=get_presence_menu(),
+            parse_mode='Markdown'
+        )
+        logger.info(f"✅ Кнопки присутствия отправлены в чат {chat_id}")
+    except Exception as e:
+        logger.error(f"❌ Ошибка отправки кнопок присутствия: {type(e).__name__}: {e}", exc_info=True)
 
 
 def setup_scheduler(app: Application):
