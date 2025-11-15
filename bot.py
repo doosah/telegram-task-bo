@@ -64,10 +64,120 @@ tasks_manager = Tasks()
 # Часовой пояс (Москва)
 MOSCOW_TZ = pytz.timezone('Europe/Moscow')
 
+# Список известных спамеров (черный список)
+SPAM_BLACKLIST = [
+    "HRmanagerYOUTUBE",
+    "performance manager"
+]
+
+# Список спам-фраз для обнаружения
+SPAM_KEYWORDS = [
+    "fucked",
+    "fuck",
+    "YOUR BOT IS",
+    "ADDITIONAL INFORMATION",
+    "personal ACCOUNT",
+    "performance manager"
+]
+
+
+def is_spam_message(text: str, username: str = None) -> bool:
+    """Проверяет, является ли сообщение спамом"""
+    if not text:
+        return False
+    
+    text_lower = text.lower()
+    username_lower = username.lower() if username else ""
+    
+    # Проверка черного списка
+    for spam_user in SPAM_BLACKLIST:
+        if spam_user.lower() in username_lower:
+            return True
+    
+    # Проверка ключевых слов
+    for keyword in SPAM_KEYWORDS:
+        if keyword.lower() in text_lower:
+            return True
+    
+    # Проверка на повторяющиеся сообщения (более 3 одинаковых символов подряд)
+    if len(set(text)) < 3 and len(text) > 10:
+        return True
+    
+    # Проверка на слишком много заглавных букв (более 50%)
+    if len(text) > 20:
+        uppercase_count = sum(1 for c in text if c.isupper())
+        if uppercase_count / len(text) > 0.5:
+            return True
+    
+    return False
+
+
+async def spam_filter(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    """Фильтр спама - проверяет сообщения перед обработкой"""
+    try:
+        user = update.effective_user
+        if not user:
+            return False
+        
+        user_id = user.id
+        username = user.username if user.username else f"user_{user_id}"
+        
+        # Проверяем, не заблокирован ли пользователь
+        if db.is_user_blocked(user_id):
+            logger.warning(f"Заблокированный пользователь {username} (ID: {user_id}) попытался отправить сообщение")
+            return True  # Блокируем
+        
+        # Проверяем текстовые сообщения
+        if update.message and update.message.text:
+            message_text = update.message.text
+            
+            if is_spam_message(message_text, username):
+                # Логируем попытку спама
+                db.log_spam_attempt(user_id, username, message_text)
+                
+                # Автоматически блокируем спамера
+                db.block_user(user_id, username, "Spam detected")
+                
+                # Уведомляем администратора
+                try:
+                    admin_id = context.bot_data.get('admin_id')
+                    if not admin_id:
+                        admin_username = context.bot_data.get('ADMIN_USERNAME', ADMIN_USERNAME)
+                        admin_id = db.get_user_id_by_username(admin_username)
+                    
+                    if admin_id:
+                        spam_notification = (
+                            f"🚫 **СПАМ ОБНАРУЖЕН И ЗАБЛОКИРОВАН**\n\n"
+                            f"👤 Пользователь: @{username}\n"
+                            f"🆔 ID: {user_id}\n"
+                            f"📝 Сообщение: {message_text[:200]}\n\n"
+                            f"Пользователь автоматически заблокирован."
+                        )
+                        await context.bot.send_message(
+                            chat_id=admin_id,
+                            text=spam_notification,
+                            parse_mode='Markdown'
+                        )
+                except Exception as e:
+                    logger.error(f"Ошибка отправки уведомления администратору о спаме: {e}", exc_info=True)
+                
+                logger.warning(f"🚫 СПАМ ОБНАРУЖЕН от @{username} (ID: {user_id}): {message_text[:100]}")
+                return True  # Блокируем сообщение
+        
+        return False  # Не спам, пропускаем
+        
+    except Exception as e:
+        logger.error(f"Ошибка в spam_filter: {e}", exc_info=True)
+        return False  # В случае ошибки пропускаем (безопаснее)
+
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /start - главное меню бота"""
     try:
+        # Проверка на спам перед обработкой
+        if await spam_filter(update, context):
+            return  # Блокируем спам
+        
         user = update.effective_user
         logger.info(f"Команда /start от пользователя @{user.username} (ID: {user.id})")
         
@@ -142,6 +252,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /cancel - отмена текущего действия"""
     try:
+        # Проверка на спам перед обработкой
+        if await spam_filter(update, context):
+            return  # Блокируем спам
+        
         user = update.effective_user
         
         # Очищаем все данные пользователя
@@ -321,6 +435,10 @@ def create_task_keyboard(task_text: str, task_id: str) -> InlineKeyboardMarkup:
 async def handle_delay_reason(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка причины опоздания"""
     try:
+        # Проверка на спам перед обработкой
+        if await spam_filter(update, context):
+            return  # Блокируем спам
+        
         if not context.user_data.get('waiting_reason'):
             return
         
@@ -400,6 +518,14 @@ async def handle_delay_reason(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка нажатий на кнопки"""
     try:
+        # Проверка на спам перед обработкой (для callback_query проверяем пользователя)
+        user = update.effective_user if update.effective_user else None
+        if user and db.is_user_blocked(user.id):
+            logger.warning(f"Заблокированный пользователь {user.username} (ID: {user.id}) попытался нажать кнопку")
+            if update.callback_query:
+                await update.callback_query.answer("❌ Доступ запрещен", show_alert=True)
+            return
+        
         query = update.callback_query
         if not query:
             logger.error("query is None")

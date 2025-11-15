@@ -88,6 +88,27 @@ class Database:
                     )
                 ''')
                 
+                # Таблица для блокировки спамеров
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS blocked_users (
+                        user_id INTEGER PRIMARY KEY,
+                        username TEXT,
+                        reason TEXT,
+                        blocked_at TEXT NOT NULL
+                    )
+                ''')
+                
+                # Таблица для логирования спам-попыток
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS spam_log (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER NOT NULL,
+                        username TEXT,
+                        message_text TEXT,
+                        detected_at TEXT NOT NULL
+                    )
+                ''')
+                
                 # Добавляем начальных пользователей, если их еще нет
                 initial_users = [
                     ('alex301182', None, 'AG'),
@@ -358,4 +379,62 @@ class Database:
                     conn.close()
         except Exception as e:
             logger_db.error(f"Ошибка сохранения отметки присутствия для {username}: {e}", exc_info=True)
+    
+    def is_user_blocked(self, user_id: int) -> bool:
+        """Проверяет, заблокирован ли пользователь"""
+        try:
+            with db_lock:
+                conn = self.get_connection()
+                try:
+                    cursor = conn.cursor()
+                    cursor.execute('SELECT user_id FROM blocked_users WHERE user_id = ?', (user_id,))
+                    result = cursor.fetchone()
+                    return result is not None
+                finally:
+                    conn.close()
+        except Exception as e:
+            logger_db.error(f"Ошибка проверки блокировки пользователя {user_id}: {e}", exc_info=True)
+            return False
+    
+    def block_user(self, user_id: int, username: str = None, reason: str = "Spam"):
+        """Блокирует пользователя"""
+        try:
+            with db_lock:
+                conn = self.get_connection()
+                try:
+                    cursor = conn.cursor()
+                    from datetime import datetime
+                    blocked_at = datetime.now().isoformat()
+                    cursor.execute('''
+                        INSERT OR REPLACE INTO blocked_users (user_id, username, reason, blocked_at)
+                        VALUES (?, ?, ?, ?)
+                    ''', (user_id, username, reason, blocked_at))
+                    conn.commit()
+                    logger_db.warning(f"Пользователь {username} (ID: {user_id}) заблокирован: {reason}")
+                finally:
+                    conn.close()
+        except Exception as e:
+            logger_db.error(f"Ошибка блокировки пользователя {user_id}: {e}", exc_info=True)
+    
+    def log_spam_attempt(self, user_id: int, username: str = None, message_text: str = None):
+        """Логирует попытку спама"""
+        try:
+            with db_lock:
+                conn = self.get_connection()
+                try:
+                    cursor = conn.cursor()
+                    from datetime import datetime
+                    detected_at = datetime.now().isoformat()
+                    # Ограничиваем длину текста сообщения
+                    if message_text and len(message_text) > 500:
+                        message_text = message_text[:500] + "..."
+                    cursor.execute('''
+                        INSERT INTO spam_log (user_id, username, message_text, detected_at)
+                        VALUES (?, ?, ?, ?)
+                    ''', (user_id, username, message_text, detected_at))
+                    conn.commit()
+                finally:
+                    conn.close()
+        except Exception as e:
+            logger_db.error(f"Ошибка логирования спама для {user_id}: {e}", exc_info=True)
 
