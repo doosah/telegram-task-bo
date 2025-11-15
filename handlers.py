@@ -6,21 +6,17 @@ import logging
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
-from database import Database
-from menu import (
-    get_main_menu, get_tasks_menu, get_task_actions_menu,
-    get_confirm_menu, get_assignee_menu, get_delay_time_menu,
-    get_delay_minutes_menu
-)
 
 logger = logging.getLogger(__name__)
-db = Database()
+
+# Импортируем глобальные объекты из bot.py через параметры
+# Это нужно, чтобы избежать циклических импортов
 
 # Состояния для ConversationHandler
 (TITLE, DESCRIPTION, DEADLINE, ASSIGNEE, REASON) = range(5)
 
 
-async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_TYPE):
+async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_TYPE, db):
     """Обработка нажатий на кнопки меню"""
     try:
         await query.answer()
@@ -28,6 +24,7 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
         username = user.username if user else None
         
         if data == "menu_main" or data == "menu_back":
+            from menu import get_main_menu
             text = (
                 "👋 **ГЛАВНОЕ МЕНЮ**\n\n"
                 "Выберите действие:"
@@ -44,6 +41,7 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
             # Здесь нужно будет использовать ConversationHandler
         
         elif data == "menu_view_tasks":
+            from menu import get_tasks_menu, get_main_menu
             tasks = db.get_custom_tasks(status='active')
             if not tasks:
                 text = "📋 **МОИ ЗАДАЧИ**\n\nУ вас пока нет активных задач."
@@ -97,7 +95,7 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
         await query.answer("❌ Произошла ошибка")
 
 
-async def handle_presence_callback(query, data: str, context: ContextTypes.DEFAULT_TYPE):
+async def handle_presence_callback(query, data: str, context: ContextTypes.DEFAULT_TYPE, db):
     """Обработка отметки присутствия"""
     try:
         user = query.from_user
@@ -119,6 +117,7 @@ async def handle_presence_callback(query, data: str, context: ContextTypes.DEFAU
         
         elif data == "presence_late":
             # Опаздываю - показываем меню выбора времени
+            from menu import get_delay_time_menu
             text = "⏰ **ОПОЗДАНИЕ**\n\nВыберите количество часов опоздания:"
             await query.edit_message_text(text, reply_markup=get_delay_time_menu(), parse_mode='Markdown')
             await query.answer()
@@ -133,7 +132,7 @@ async def handle_presence_callback(query, data: str, context: ContextTypes.DEFAU
         await query.answer("❌ Произошла ошибка")
 
 
-async def handle_delay_callback(query, data: str, context: ContextTypes.DEFAULT_TYPE):
+async def handle_delay_callback(query, data: str, context: ContextTypes.DEFAULT_TYPE, db, get_delay_time_menu, get_delay_minutes_menu):
     """Обработка выбора времени опоздания"""
     try:
         user = query.from_user
@@ -164,8 +163,9 @@ async def handle_delay_callback(query, data: str, context: ContextTypes.DEFAULT_
             text = (
                 f"⏰ **ОПОЗДАНИЕ**\n\n"
                 f"Выбрано: {hour}ч {minute}м\n\n"
-                f"Введите краткую причину опоздания:"
+                f"Введите краткую причину опоздания (одним сообщением):"
             )
+            context.user_data['waiting_reason'] = True
             await query.edit_message_text(text, parse_mode='Markdown')
             await query.answer()
             # Здесь нужно будет использовать ConversationHandler для получения причины
@@ -175,7 +175,7 @@ async def handle_delay_callback(query, data: str, context: ContextTypes.DEFAULT_
         await query.answer("❌ Произошла ошибка")
 
 
-async def handle_new_task_callback(query, data: str, context: ContextTypes.DEFAULT_TYPE):
+async def handle_new_task_callback(query, data: str, context: ContextTypes.DEFAULT_TYPE, db, get_task_actions_menu, get_confirm_menu):
     """Обработка новых задач из меню"""
     try:
         await query.answer()
@@ -251,7 +251,7 @@ async def handle_old_task_callback(query, data: str, context: ContextTypes.DEFAU
     await query.answer("Обработка старых задач...")
 
 
-async def handle_confirm_callback(query, data: str, context: ContextTypes.DEFAULT_TYPE):
+async def handle_confirm_callback(query, data: str, context: ContextTypes.DEFAULT_TYPE, db, get_task_actions_menu, get_tasks_menu):
     """Обработка подтверждений"""
     try:
         await query.answer()
@@ -289,7 +289,7 @@ async def handle_confirm_callback(query, data: str, context: ContextTypes.DEFAUL
         await query.answer("❌ Произошла ошибка")
 
 
-async def handle_assignee_callback(query, data: str, context: ContextTypes.DEFAULT_TYPE):
+async def handle_assignee_callback(query, data: str, context: ContextTypes.DEFAULT_TYPE, db):
     """Обработка выбора исполнителя"""
     try:
         await query.answer()
