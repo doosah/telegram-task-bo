@@ -438,11 +438,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Это не критично, просто логируем
             
     except Exception as e:
-        logger.error(f"❌ ОШИБКА в button_callback: {e}", exc_info=True)
+        logger.error(f"❌ КРИТИЧЕСКАЯ ОШИБКА в button_callback: {type(e).__name__}: {e}", exc_info=True)
         try:
-            await query.answer("❌ Произошла ошибка", show_alert=True)
-        except:
-            pass
+            # Пытаемся получить query из update
+            if update and hasattr(update, 'callback_query') and update.callback_query:
+                await update.callback_query.answer("❌ Произошла ошибка", show_alert=True)
+        except Exception as answer_error:
+            logger.error(f"Не удалось отправить ответ об ошибке: {answer_error}")
+        # НЕ ПОДНИМАЕМ ИСКЛЮЧЕНИЕ - бот должен продолжать работать
 
 
 async def send_morning_tasks(app, force_weekend=False):
