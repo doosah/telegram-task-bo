@@ -490,11 +490,15 @@ async def handle_old_task_callback(query, data: str, context: ContextTypes.DEFAU
         logger.info(f"Статусы: AG={status_ag}, KA={status_ka}, SA={status_sa}")
         
         # Определяем общий статус задачи
+        # Считаем количество исполнителей, которые взяли задачу (не ⚪)
+        active_count = sum(1 for status in [status_ag, status_ka, status_sa] if status != "⚪")
+        
         # ✅ только если все выполнили
         if status_ag == "✅" and status_ka == "✅" and status_sa == "✅":
             overall_status = "✅"
-        elif status_ag != "⚪" or status_ka != "⚪" or status_sa != "⚪":
-            overall_status = "⏳"
+        elif active_count > 0:
+            # Показываем количество исполнителей эмодзи 👤
+            overall_status = "👤" * active_count
         else:
             overall_status = "⚪"
         
@@ -526,14 +530,20 @@ async def handle_old_task_callback(query, data: str, context: ContextTypes.DEFAU
                         if button.callback_data == data:
                             # Убираем статус из текста кнопки
                             button_text = button.text
-                            # Убираем эмодзи статуса в конце
-                            for status_emoji in ["⚪", "⏳", "✅"]:
-                                if button_text.endswith(f" {status_emoji}"):
-                                    task_text = button_text[:-2].strip()
-                                    # Убираем номер задачи если есть
-                                    if task_text.startswith(f"{task_id.split('_')[1]}."):
-                                        task_text = task_text.split(".", 1)[1].strip()
-                                    break
+                            # Убираем эмодзи статуса в конце (⚪, ⏳, ✅, или 👤)
+                            # Сначала проверяем множественные 👤
+                            if "👤" in button_text:
+                                # Убираем все 👤 из конца
+                                task_text = button_text.rstrip("👤").strip()
+                            else:
+                                # Проверяем одиночные эмодзи
+                                for status_emoji in ["⚪", "⏳", "✅"]:
+                                    if button_text.endswith(f" {status_emoji}"):
+                                        task_text = button_text[:-2].strip()
+                                        break
+                            # Убираем номер задачи если есть
+                            if task_text and task_text.startswith(f"{task_id.split('_')[1]}."):
+                                task_text = task_text.split(".", 1)[1].strip()
                             break
         
         if not task_text:
