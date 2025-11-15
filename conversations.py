@@ -49,6 +49,10 @@ async def start_create_task(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 async def receive_title(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Получение названия задачи"""
     try:
+        if not update.message or not update.message.text:
+            logger.error("Нет сообщения или текста в receive_title")
+            return -1
+        
         title = update.message.text.strip()
         
         if len(title) < 3:
@@ -82,6 +86,10 @@ async def receive_title(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 async def receive_description(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Получение описания задачи"""
     try:
+        if not update.message or not update.message.text:
+            logger.error("Нет сообщения или текста в receive_description")
+            return -1
+        
         description = update.message.text.strip()
         
         if len(description) > 500:
@@ -132,6 +140,10 @@ async def skip_description(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 async def receive_deadline(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Получение срока выполнения - переход к фото"""
     try:
+        if not update.message or not update.message.text:
+            logger.error("Нет сообщения или текста в receive_deadline")
+            return -1
+        
         deadline_str = update.message.text.strip()
         
         # Парсим дату в различных форматах
@@ -223,10 +235,19 @@ async def skip_deadline(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 async def receive_assignee(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Получение исполнителя - переход к дате"""
     try:
-        assignee = update.callback_query.data.split("_")[1] if update.callback_query else "all"
+        if not update.callback_query or not update.callback_query.data:
+            logger.error("Нет callback_query или data в receive_assignee")
+            return -1
+        
+        parts = update.callback_query.data.split("_")
+        if len(parts) < 2:
+            await update.callback_query.answer("❌ Неверный формат данных", show_alert=True)
+            return ASSIGNEE
+        
+        assignee = parts[1]
         
         if assignee not in ["AG", "KA", "SA", "all"]:
-            await update.callback_query.answer("❌ Неверный выбор исполнителя")
+            await update.callback_query.answer("❌ Неверный выбор исполнителя", show_alert=True)
             return ASSIGNEE
         
         context.user_data['creating_task']['assignee'] = assignee
@@ -463,7 +484,11 @@ async def start_edit_task(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             return -1
         
         # Извлекаем task_id из callback_data (формат: task_edit_1)
-        task_id = int(query.data.split("_")[-1])
+        try:
+            task_id = int(query.data.split("_")[-1])
+        except (ValueError, IndexError):
+            await query.answer("❌ Ошибка формата ID задачи", show_alert=True)
+            return -1
         context.user_data['editing_task_id'] = task_id
         
         # Получаем задачу из БД
@@ -508,6 +533,10 @@ async def start_edit_task(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 async def receive_edit_title(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Получение нового названия задачи"""
     try:
+        if not update.message or not update.message.text:
+            logger.error("Нет сообщения или текста в receive_edit_title")
+            return -1
+        
         title = update.message.text.strip()
         
         if len(title) < 3:
@@ -570,6 +599,10 @@ async def skip_edit_title(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 async def receive_edit_description(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Получение нового описания задачи"""
     try:
+        if not update.message or not update.message.text:
+            logger.error("Нет сообщения или текста в receive_edit_description")
+            return -1
+        
         description = update.message.text.strip()
         
         if len(description) > 500:
@@ -628,6 +661,10 @@ async def skip_edit_description(update: Update, context: ContextTypes.DEFAULT_TY
 async def receive_edit_deadline(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Получение нового срока выполнения"""
     try:
+        if not update.message or not update.message.text:
+            logger.error("Нет сообщения или текста в receive_edit_deadline")
+            return -1
+        
         deadline_str = update.message.text.strip()
         
         # Парсим дату в формате ДД.ММ.ГГГГ
@@ -676,10 +713,19 @@ async def skip_edit_deadline(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def receive_edit_assignee(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Получение нового исполнителя и завершение редактирования"""
     try:
-        assignee = update.callback_query.data.split("_")[1] if update.callback_query else "all"
+        if not update.callback_query or not update.callback_query.data:
+            logger.error("Нет callback_query или data в receive_edit_assignee")
+            return -1
+        
+        parts = update.callback_query.data.split("_")
+        if len(parts) < 2:
+            await update.callback_query.answer("❌ Неверный формат данных", show_alert=True)
+            return EDIT_ASSIGNEE
+        
+        assignee = parts[1]
         
         if assignee not in ["AG", "KA", "SA", "all"]:
-            await update.callback_query.answer("❌ Неверный выбор исполнителя")
+            await update.callback_query.answer("❌ Неверный выбор исполнителя", show_alert=True)
             return EDIT_ASSIGNEE
         
         context.user_data['editing_task']['assignee'] = assignee
@@ -780,7 +826,11 @@ async def start_complete_task(update: Update, context: ContextTypes.DEFAULT_TYPE
             return -1
         
         # Извлекаем task_id из callback_data (формат: task_complete_1)
-        task_id = int(query.data.split("_")[-1])
+        try:
+            task_id = int(query.data.split("_")[-1])
+        except (ValueError, IndexError):
+            await query.answer("❌ Ошибка формата ID задачи", show_alert=True)
+            return -1
         context.user_data['completing_task_id'] = task_id
         
         # Получаем задачу из БД
@@ -818,6 +868,10 @@ async def start_complete_task(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def receive_complete_result(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Получение результата выполнения задачи"""
     try:
+        if not update.message or not update.message.text:
+            logger.error("Нет сообщения или текста в receive_complete_result")
+            return -1
+        
         result_text = update.message.text.strip()
         
         if len(result_text) > 1000:
@@ -1009,7 +1063,12 @@ async def complete_fast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         query = update.callback_query
         # Извлекаем task_id из callback_data или из context
         if query and query.data.startswith("task_complete_fast_"):
-            task_id = int(query.data.split("_")[-1])
+            try:
+                task_id = int(query.data.split("_")[-1])
+            except (ValueError, IndexError):
+                if query:
+                    await query.answer("❌ Ошибка формата ID задачи", show_alert=True)
+                return -1
         else:
             task_id = context.user_data.get('completing_task_id')
         
@@ -1110,8 +1169,15 @@ async def start_work_task(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await query.answer("❌ Неверный формат", show_alert=True)
             return -1
         
-        task_id = int(parts[2])
-        assignee = parts[3]
+        try:
+            task_id = int(parts[2])
+            assignee = parts[3]
+            if assignee not in ["AG", "KA", "SA"]:
+                await query.answer("❌ Неверный исполнитель", show_alert=True)
+                return -1
+        except (ValueError, IndexError):
+            await query.answer("❌ Ошибка формата данных", show_alert=True)
+            return -1
         
         # Получаем задачу из БД
         if 'db' in context.bot_data:
@@ -1224,8 +1290,16 @@ async def work_done_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 async def receive_work_result(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Получение текста 'Выполнена работа' - переход к прикреплению материалов"""
     try:
+        if not update.message or not update.message.text:
+            logger.error("Нет сообщения или текста в receive_work_result")
+            return -1
+        
         # Пользователь ввел текст
         result_text = update.message.text.strip()
+        if not result_text:
+            await update.message.reply_text("❌ Текст не может быть пустым. Попробуйте снова:")
+            return WORK_RESULT
+        
         context.user_data['working_result'] = result_text
         
         text = (
@@ -1333,10 +1407,16 @@ async def receive_work_photo(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 admin_id = context.bot_data['admin_id']
             else:
                 # Пытаемся получить из БД
-                from bot import ADMIN_USERNAME
-                admin_id = db.get_user_id_by_username(ADMIN_USERNAME)
-                if admin_id:
-                    context.bot_data['admin_id'] = admin_id
+                admin_username = context.bot_data.get('ADMIN_USERNAME')
+                if not admin_username:
+                    # Fallback: пытаемся получить из переменных окружения
+                    import os
+                    admin_username = os.getenv('ADMIN_USERNAME', '').strip()
+                
+                if admin_username:
+                    admin_id = db.get_user_id_by_username(admin_username)
+                    if admin_id:
+                        context.bot_data['admin_id'] = admin_id
             
             if admin_id:
                 admin_text = (
@@ -1452,10 +1532,16 @@ async def skip_work_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 admin_id = context.bot_data['admin_id']
             else:
                 # Пытаемся получить из БД
-                from bot import ADMIN_USERNAME
-                admin_id = db.get_user_id_by_username(ADMIN_USERNAME)
-                if admin_id:
-                    context.bot_data['admin_id'] = admin_id
+                admin_username = context.bot_data.get('ADMIN_USERNAME')
+                if not admin_username:
+                    # Fallback: пытаемся получить из переменных окружения
+                    import os
+                    admin_username = os.getenv('ADMIN_USERNAME', '').strip()
+                
+                if admin_username:
+                    admin_id = db.get_user_id_by_username(admin_username)
+                    if admin_id:
+                        context.bot_data['admin_id'] = admin_id
             
             if admin_id:
                 admin_text = (

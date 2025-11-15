@@ -289,9 +289,9 @@ def create_task_keyboard(task_text: str, task_id: str) -> InlineKeyboardMarkup:
         callback_data = f"task_{task_id}"
         logger.warning(f"Укорочен task_id до: {task_id}")
     
-    # ОПТИМИЗАЦИЯ ДЛЯ МОБИЛЬНЫХ: ограничиваем длину текста кнопки до 30 символов
+    # ОПТИМИЗАЦИЯ ДЛЯ МОБИЛЬНЫХ: ограничиваем длину текста кнопки до 20 символов
     # Это обеспечит полную видимость на мобильных устройствах
-    max_mobile_length = 30
+    max_mobile_length = 20
     if len(task_text) > max_mobile_length:
         # Укорачиваем текст задачи для мобильных
         task_text_short = task_text[:max_mobile_length-3] + "..."
@@ -300,8 +300,8 @@ def create_task_keyboard(task_text: str, task_id: str) -> InlineKeyboardMarkup:
         button_text = f"{task_text} {task_status}"
     
     # Дополнительная проверка на случай, если статус делает текст слишком длинным
-    if len(button_text) > 35:  # Оставляем запас
-        max_text_len = 35 - len(f" {task_status}")
+    if len(button_text) > 25:  # Оставляем запас для мобильных
+        max_text_len = 25 - len(f" {task_status}")
         task_text_short = task_text[:max_text_len-3] + "..."
         button_text = f"{task_text_short} {task_status}"
         logger.warning(f"Текст кнопки укорочен для мобильных: '{button_text}'")
@@ -352,7 +352,8 @@ async def handle_delay_reason(update: Update, context: ContextTypes.DEFAULT_TYPE
                 admin_id = context.bot_data['admin_id']
             else:
                 # Пытаемся получить из БД
-                admin_id = db.get_user_id_by_username(ADMIN_USERNAME)
+                admin_username = context.bot_data.get('ADMIN_USERNAME', ADMIN_USERNAME)
+                admin_id = db.get_user_id_by_username(admin_username)
                 if admin_id:
                     context.bot_data['admin_id'] = admin_id
             
@@ -851,6 +852,10 @@ def main():
         # Сохраняем CHAT_ID для использования в ConversationHandlers
         application.bot_data['CHAT_ID'] = CHAT_ID
         logger.info("CHAT_ID сохранен в bot_data")
+        
+        # Сохраняем ADMIN_USERNAME для использования в handlers и conversations
+        application.bot_data['ADMIN_USERNAME'] = ADMIN_USERNAME
+        logger.info("ADMIN_USERNAME сохранен в bot_data")
         
         # Сохраняем функции для тестирования
         application.bot_data['send_morning_tasks'] = send_morning_tasks

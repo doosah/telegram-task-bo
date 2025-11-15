@@ -216,10 +216,16 @@ async def handle_presence_callback(query, data: str, context: ContextTypes.DEFAU
                     admin_id = context.bot_data['admin_id']
                 else:
                     # Пытаемся получить из БД
-                    from bot import ADMIN_USERNAME
-                    admin_id = db.get_user_id_by_username(ADMIN_USERNAME)
-                    if admin_id:
-                        context.bot_data['admin_id'] = admin_id
+                    admin_username = context.bot_data.get('ADMIN_USERNAME')
+                    if not admin_username:
+                        # Fallback: пытаемся получить из переменных окружения
+                        import os
+                        admin_username = os.getenv('ADMIN_USERNAME', '').strip()
+                    
+                    if admin_username:
+                        admin_id = db.get_user_id_by_username(admin_username)
+                        if admin_id:
+                            context.bot_data['admin_id'] = admin_id
                 
                 if admin_id:
                     text = f"✅ **ПРИБЫТИЕ**\n\n👤 Логин: @{username}\n⏰ Время: {time_str}\n📍 Статус: На рабочем месте"
@@ -265,9 +271,18 @@ async def handle_delay_callback(query, data: str, context: ContextTypes.DEFAULT_
         
         parts = data.split("_")
         
+        # Проверка на минимальную длину parts
+        if len(parts) < 3:
+            await query.answer("❌ Неверный формат данных", show_alert=True)
+            return
+        
         if parts[1] == "hour":
             # Выбрали часы, показываем минуты
-            hour = int(parts[2])
+            try:
+                hour = int(parts[2])
+            except (ValueError, IndexError):
+                await query.answer("❌ Ошибка формата времени", show_alert=True)
+                return
             context.user_data['delay_hour'] = hour
             text = f"⏰ **ОПОЗДАНИЕ**\n\nВыбрано: {hour}ч\n\nВыберите минуты:"
             await query.edit_message_text(text, reply_markup=get_delay_minutes_menu(hour), parse_mode='Markdown')
@@ -275,8 +290,12 @@ async def handle_delay_callback(query, data: str, context: ContextTypes.DEFAULT_
         
         elif parts[1] == "minute":
             # Выбрали минуты, запрашиваем причину
-            hour = int(parts[2])
-            minute = int(parts[3])
+            try:
+                hour = int(parts[2])
+                minute = int(parts[3])
+            except (ValueError, IndexError):
+                await query.answer("❌ Ошибка формата времени", show_alert=True)
+                return
             delay_minutes = hour * 60 + minute
             context.user_data['delay_minutes'] = delay_minutes
             context.user_data['delay_hour'] = hour
@@ -328,7 +347,11 @@ async def handle_new_task_callback(query, data: str, context: ContextTypes.DEFAU
             return
         
         action = parts[1]  # view, edit, delete, complete, share
-        task_id = int(parts[2])
+        try:
+            task_id = int(parts[2])
+        except (ValueError, IndexError):
+            await query.answer("❌ Ошибка формата ID задачи", show_alert=True)
+            return
         
         task = db.get_custom_task(task_id)
         if not task:
@@ -559,11 +582,16 @@ async def handle_confirm_callback(query, data: str, context: ContextTypes.DEFAUL
         parts = data.split("_")
         
         if len(parts) < 3:
+            await query.answer("❌ Неверный формат", show_alert=True)
             return
         
         action_type = parts[0]  # confirm или cancel
         action = parts[1]  # delete, complete и т.д.
-        item_id = int(parts[2])
+        try:
+            item_id = int(parts[2])
+        except (ValueError, IndexError):
+            await query.answer("❌ Ошибка формата ID", show_alert=True)
+            return
         
         if action_type == "cancel":
             # Отмена действия
