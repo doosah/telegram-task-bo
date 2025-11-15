@@ -181,16 +181,18 @@ def create_task_keyboard(task_text: str, task_id: str) -> InlineKeyboardMarkup:
     # Получаем статусы из БД (быстро, без блокировок)
     status_ag = "⚪"
     status_ka = "⚪"
+    status_sa = "⚪"
     try:
         status_ag = db.get_task_status(f"{task_id}_AG") or "⚪"
         status_ka = db.get_task_status(f"{task_id}_KA") or "⚪"
+        status_sa = db.get_task_status(f"{task_id}_SA") or "⚪"
     except:
         pass
     
-    # Определяем общий статус задачи
-    if status_ag == "✅" and status_ka == "✅":
+    # Определяем общий статус задачи (✅ только когда все 3 выполнили)
+    if status_ag == "✅" and status_ka == "✅" and status_sa == "✅":
         task_status = "✅"
-    elif status_ag != "⚪" or status_ka != "⚪":
+    elif status_ag != "⚪" or status_ka != "⚪" or status_sa != "⚪":
         task_status = "⏳"
     else:
         task_status = "⚪"
@@ -231,10 +233,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = user.id
     username = user.username
     
-    # Определяем, какой пользователь нажал (АГ или КА)
+    # Определяем, какой пользователь нажал (АГ, КА или СА)
     user_mapping = {
         "alex301182": {"initials": "AG", "name": "АГ"},
-        "Korudirp": {"initials": "KA", "name": "КА"}
+        "Korudirp": {"initials": "KA", "name": "КА"},
+        "sanya_hui_sosi1488": {"initials": "SA", "name": "СА"}
     }
     
     # Определяем, кто нажал
@@ -261,9 +264,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Сохраняем ID пользователя в базу данных
     db.save_user_id(username, user_id, user_initials)
     
-    # Получаем текущие статусы для АГ и КА
+    # Получаем текущие статусы для АГ, КА и СА
     status_ag = db.get_task_status(f"{task_id}_AG") or "⚪"
     status_ka = db.get_task_status(f"{task_id}_KA") or "⚪"
+    status_sa = db.get_task_status(f"{task_id}_SA") or "⚪"
     
     # Меняем статус для текущего пользователя: ⚪ → ⏳ → ✅
     status_key = f"{task_id}_{user_initials}"
@@ -279,13 +283,15 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Обновляем статусы после изменения
     if user_initials == "AG":
         status_ag = new_status
-    else:
+    elif user_initials == "KA":
         status_ka = new_status
+    elif user_initials == "SA":
+        status_sa = new_status
     
-    # Определяем общий статус задачи для отображения
-    if status_ag == "✅" and status_ka == "✅":
-        task_status = "✅"  # Оба выполнили
-    elif status_ag != "⚪" or status_ka != "⚪":
+    # Определяем общий статус задачи для отображения (✅ только когда все 3 выполнили)
+    if status_ag == "✅" and status_ka == "✅" and status_sa == "✅":
+        task_status = "✅"  # Все трое выполнили
+    elif status_ag != "⚪" or status_ka != "⚪" or status_sa != "⚪":
         task_status = "⏳"  # Кто-то взял в работу
     else:
         task_status = "⚪"  # Никто не взял
@@ -354,7 +360,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Отправляем подтверждение
     if task_status == "✅":
-        await query.answer(f"✅ Задача выполнена! ({user_name} и другой участник)", show_alert=False)
+        await query.answer(f"✅ Задача выполнена! (все участники)", show_alert=False)
     else:
         await query.answer(f"⏳ {user_name} взял задачу в работу", show_alert=False)
 
@@ -452,7 +458,8 @@ async def send_reminders(app: Application):
     # Получаем невыполненные задачи для каждого пользователя
     user_mapping = {
         "AG": {"username": "alex301182", "initials": "АГ"},
-        "KA": {"username": "Korudirp", "initials": "КА"}
+        "KA": {"username": "Korudirp", "initials": "КА"},
+        "SA": {"username": "sanya_hui_sosi1488", "initials": "СА"}
     }
     
     # Собираем невыполненные задачи для каждого пользователя
@@ -514,13 +521,17 @@ async def send_evening_summary(app: Application):
         task_id = f"{today}_{i}"
         status_ag = db.get_task_status(f"{task_id}_AG")
         status_ka = db.get_task_status(f"{task_id}_KA")
+        status_sa = db.get_task_status(f"{task_id}_SA")
         
-        if status_ag != "✅" or status_ka != "✅":
+        # Задача невыполнена, если хотя бы один не выполнил
+        if status_ag != "✅" or status_ka != "✅" or status_sa != "✅":
             users_needed = []
             if status_ag != "✅":
                 users_needed.append("@alex301182")
             if status_ka != "✅":
                 users_needed.append("@Korudirp")
+            if status_sa != "✅":
+                users_needed.append("@sanya_hui_sosi1488")
             
             incomplete.append({
                 "task": task,
