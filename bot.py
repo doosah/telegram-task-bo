@@ -818,6 +818,11 @@ def main():
         application.add_handler(complete_task_conv)
         logger.info("ConversationHandler для завершения задач зарегистрирован")
         
+        # Регистрируем обработчик кнопок ПОСЛЕ всех ConversationHandlers
+        # чтобы ConversationHandlers могли перехватить свои callback_data
+        application.add_handler(CallbackQueryHandler(button_callback))
+        logger.info("Обработчик кнопок зарегистрирован")
+        
         # Настраиваем расписание
         setup_scheduler(application)
         logger.info("Расписание настроено")
