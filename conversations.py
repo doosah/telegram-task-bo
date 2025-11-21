@@ -1925,15 +1925,37 @@ async def start_team_add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 async def receive_team_username(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     try:
+        if not update.message or not update.message.text:
+            logger.error("Нет сообщения или текста в receive_team_username")
+            return -1
+        
         username = update.message.text.strip().lstrip('@')
+        
+        if len(username) < 3:
+            await update.message.reply_text("❌ Username слишком короткий (минимум 3 символа). Попробуйте снова:")
+            return TEAM_USERNAME
+        
+        if len(username) > 32:
+            await update.message.reply_text("❌ Username слишком длинный (максимум 32 символа). Попробуйте снова:")
+            return TEAM_USERNAME
+        
         context.user_data['team_add_username'] = username
+        
+        text = (
+            "👥 **ДОБАВЛЕНИЕ СОТРУДНИКА**\n\n"
+            "Шаг 2/2: Инициалы сотрудника\n\n"
+            "Выберите инициалы или введите свои:"
+        )
+        
         buttons = [
             [InlineKeyboardButton("AG", callback_data="team_init_AG"), InlineKeyboardButton("KA", callback_data="team_init_KA")],
-            [InlineKeyboardButton("Другое", callback_data="team_init_other"), InlineKeyboardButton("Отмена", callback_data="team_init_cancel")]
+            [InlineKeyboardButton("Другое", callback_data="team_init_other")],
+            [InlineKeyboardButton("❌ Отмена", callback_data="team_init_cancel")]
         ]
-        await update.message.reply_text("Выберите инициалы", reply_markup=InlineKeyboardMarkup(buttons))
+        await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(buttons), parse_mode='Markdown')
         return TEAM_INITIALS
-    except Exception:
+    except Exception as e:
+        logger.error(f"Ошибка в receive_team_username: {e}", exc_info=True)
         return -1
 
 async def receive_team_initials(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -1942,28 +1964,56 @@ async def receive_team_initials(update: Update, context: ContextTypes.DEFAULT_TY
         data = query.data
         if data == 'team_init_cancel':
             await query.answer("Отменено")
-            await query.edit_message_text("Отмена")
+            from menu import get_team_menu
+            await query.edit_message_text("❌ Добавление отменено", reply_markup=get_team_menu(), parse_mode='Markdown')
             return -1
         if data == 'team_init_other':
-            await query.edit_message_text("Введите инициалы")
+            await query.answer()
+            await query.edit_message_text("👥 **ДОБАВЛЕНИЕ СОТРУДНИКА**\n\nВведите инициалы (например, AB, CD):")
             return TEAM_CUSTOM_INITIALS
         initials = data.split('_')[-1]
         username = context.user_data.get('team_add_username')
+        if not username:
+            await query.answer("❌ Ошибка: username не найден", show_alert=True)
+            return -1
         db = context.bot_data.get('db')
+        if not db:
+            await query.answer("❌ Ошибка: база данных не найдена", show_alert=True)
+            return -1
         db.save_user(username, initials)
-        await query.edit_message_text(f"✅ Добавлен: @{username} ({initials})")
+        from menu import get_team_menu
+        text = f"✅ **СОТРУДНИК ДОБАВЛЕН**\n\n@{username} ({initials}) успешно добавлен в команду."
+        await query.edit_message_text(text, reply_markup=get_team_menu(), parse_mode='Markdown')
+        await query.answer("✅ Сотрудник добавлен")
+        context.user_data.pop('team_add_username', None)
         return -1
-    except Exception:
+    except Exception as e:
+        logger.error(f"Ошибка в receive_team_initials: {e}", exc_info=True)
+        await query.answer("❌ Произошла ошибка", show_alert=True)
         return -1
 
 async def receive_team_custom_initials(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     try:
         initials = update.message.text.strip().upper()
+        if len(initials) < 2 or len(initials) > 10:
+            await update.message.reply_text("❌ Инициалы должны быть от 2 до 10 символов. Попробуйте снова:")
+            return TEAM_CUSTOM_INITIALS
         username = context.user_data.get('team_add_username')
+        if not username:
+            await update.message.reply_text("❌ Ошибка: username не найден")
+            return -1
         db = context.bot_data.get('db')
+        if not db:
+            await update.message.reply_text("❌ Ошибка: база данных не найдена")
+            return -1
         db.save_user(username, initials)
-        await update.message.reply_text(f"✅ Добавлен: @{username} ({initials})")
+        from menu import get_team_menu
+        text = f"✅ **СОТРУДНИК ДОБАВЛЕН**\n\n@{username} ({initials}) успешно добавлен в команду."
+        await update.message.reply_text(text, reply_markup=get_team_menu(), parse_mode='Markdown')
+        context.user_data.pop('team_add_username', None)
         return -1
-    except Exception:
+    except Exception as e:
+        logger.error(f"Ошибка в receive_team_custom_initials: {e}", exc_info=True)
+        await update.message.reply_text("❌ Произошла ошибка при добавлении сотрудника")
         return -1
 

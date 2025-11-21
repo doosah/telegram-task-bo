@@ -205,10 +205,8 @@ def get_team_menu() -> InlineKeyboardMarkup:
     keyboard = [
         [
             InlineKeyboardButton("➕ Добавить сотрудника", callback_data="team_add"),
-            InlineKeyboardButton("📋 Список", callback_data="team_list_btn")
-        ],
-        [
-            InlineKeyboardButton("🗑️ Удалить сотрудника", callback_data="team_remove")
+            InlineKeyboardButton("📋 Список", callback_data="team_list_btn"),
+            InlineKeyboardButton("🗑️ Удалить", callback_data="team_remove")
         ],
         [
             InlineKeyboardButton("🔙 Назад в меню", callback_data="menu_main")

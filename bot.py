@@ -625,9 +625,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.answer()
             return
         
-        # Обработка меню (кроме menu_create_task и menu_add_employee - их обрабатывает ConversationHandler)
-        # Если это menu_create_task или menu_add_employee, просто возвращаемся - ConversationHandler должен перехватить
-        if data == "menu_create_task" or data == "menu_add_employee":
+        # Обработка меню (кроме menu_create_task, menu_add_employee и team_add - их обрабатывает ConversationHandler)
+        # Если это menu_create_task, menu_add_employee или team_add, просто возвращаемся - ConversationHandler должен перехватить
+        if data == "menu_create_task" or data == "menu_add_employee" or data == "team_add":
             return  # Не обрабатываем здесь, пусть ConversationHandler перехватит
         
         if data.startswith("menu_"):
@@ -1285,7 +1285,35 @@ def main():
         logger.info("ConversationHandler для редактирования задач зарегистрирован (группа 2)")
         
         # ConversationHandler для добавления сотрудника
+        from conversations import (
+            TEAM_USERNAME, TEAM_INITIALS, TEAM_CUSTOM_INITIALS,
+            start_team_add, receive_team_username, receive_team_initials, receive_team_custom_initials
+        )
+        
         add_employee_conv = ConversationHandler(
+            entry_points=[
+                CallbackQueryHandler(start_team_add, pattern="^team_add$")
+            ],
+            states={
+                TEAM_USERNAME: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, receive_team_username)
+                ],
+                TEAM_INITIALS: [
+                    CallbackQueryHandler(receive_team_initials, pattern="^team_init_")
+                ],
+                TEAM_CUSTOM_INITIALS: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, receive_team_custom_initials)
+                ]
+            },
+            fallbacks=[
+                CallbackQueryHandler(lambda u, c: -1, pattern="^team_init_cancel$"),
+                CommandHandler("cancel", lambda u, c: -1)
+            ],
+            name="add_employee_conversation"
+        )
+        
+        # Старый ConversationHandler для menu_add_employee (оставляем для совместимости)
+        old_add_employee_conv = ConversationHandler(
             entry_points=[
                 CallbackQueryHandler(start_add_employee, pattern="^menu_add_employee$")
             ],
@@ -1309,6 +1337,7 @@ def main():
         )
         
         application.add_handler(add_employee_conv, group=2)
+        application.add_handler(old_add_employee_conv, group=2)
         logger.info("ConversationHandler для добавления сотрудника зарегистрирован (группа 2)")
         
         complete_task_conv = ConversationHandler(
