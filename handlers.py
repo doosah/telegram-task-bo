@@ -98,6 +98,39 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
             ]])
             await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
         
+        elif data == "menu_team":
+            from menu import get_team_menu
+            text = (
+                "👥 **УПРАВЛЕНИЕ КОМАНДОЙ**\n\n"
+                "Выберите действие:"
+            )
+            await query.edit_message_text(text, reply_markup=get_team_menu(), parse_mode='Markdown')
+        
+        elif data == "team_list_btn":
+            employees = db.get_all_employees()
+            if not employees:
+                text = "📋 **СПИСОК СОТРУДНИКОВ**\n\nСписок пуст. Добавьте сотрудников через кнопку \"➕ Добавить сотрудника\"."
+            else:
+                text = "📋 **СПИСОК СОТРУДНИКОВ**\n\n"
+                for emp in employees:
+                    username = emp.get('username', 'Не указан')
+                    initials = emp.get('initials', 'Не указаны')
+                    user_id = emp.get('user_id', 'Не указан')
+                    text += f"👤 @{username}\n"
+                    text += f"   Инициалы: {initials}\n"
+                    text += f"   ID: {user_id}\n\n"
+            
+            from menu import get_team_menu
+            keyboard = InlineKeyboardMarkup([[
+                InlineKeyboardButton("🔙 Назад к команде", callback_data="menu_team")
+            ]])
+            await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
+        
+        elif data == "menu_add_employee":
+            # ConversationHandler обработает это через entry_points
+            # НЕ обрабатываем здесь, чтобы ConversationHandler мог перехватить
+            return
+        
         elif data == "test_daily_tasks":
             # Тестовая отправка ежедневных задач - вызываем send_morning_tasks напрямую
             try:

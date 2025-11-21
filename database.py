@@ -255,6 +255,32 @@ class Database:
             logger_db.error(f"Ошибка получения ID пользователя {username}: {e}", exc_info=True)
             return None
     
+    def get_all_employees(self) -> list:
+        """
+        Получить список всех сотрудников
+        Возвращает список словарей с информацией о сотрудниках
+        """
+        try:
+            with db_lock:
+                conn = self.get_connection()
+                try:
+                    cursor = conn.cursor()
+                    cursor.execute('SELECT username, user_id, initials FROM users ORDER BY initials')
+                    results = cursor.fetchall()
+                    employees = []
+                    for row in results:
+                        employees.append({
+                            'username': row[0],
+                            'user_id': row[1],
+                            'initials': row[2]
+                        })
+                    return employees
+                finally:
+                    conn.close()
+        except Exception as e:
+            logger_db.error(f"Ошибка получения списка сотрудников: {e}", exc_info=True)
+            return []
+    
     def save_custom_task(self, title: str, description: str, deadline: str, assignee: str, creator: str) -> int:
         """Сохраняет новую задачу, созданную через меню"""
         try:

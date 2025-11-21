@@ -15,6 +15,8 @@ logger = logging.getLogger(__name__)
 (EDIT_TITLE, EDIT_DESCRIPTION, EDIT_DEADLINE, EDIT_ASSIGNEE) = range(5, 9)
 (COMPLETE_RESULT, COMPLETE_PHOTO) = range(9, 11)
 (WORK_RESULT, WORK_PHOTO) = range(11, 13)  # Состояния для работы с задачей
+# Состояния для добавления сотрудника
+(EMPLOYEE_USERNAME, EMPLOYEE_INITIALS, EMPLOYEE_INITIALS_INPUT) = range(13, 16)
 
 
 async def start_create_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -1112,6 +1114,231 @@ async def cancel_complete_task(update: Update, context: ContextTypes.DEFAULT_TYP
         return -1  # Завершаем диалог
     except Exception as e:
         logger.error(f"Ошибка в cancel_complete_task: {e}", exc_info=True)
+        return -1
+
+
+# ========== ДОБАВЛЕНИЕ СОТРУДНИКА ==========
+
+async def start_add_employee(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Начало добавления сотрудника - запрос username"""
+    try:
+        user = update.effective_user
+        logger.info(f"Начало добавления сотрудника пользователем @{user.username}")
+        
+        context.user_data['adding_employee'] = {}
+        
+        text = (
+            "👥 **ДОБАВЛЕНИЕ СОТРУДНИКА**\n\n"
+            "Шаг 1/2: Username сотрудника\n\n"
+            "Введите @username сотрудника (без символа @):"
+        )
+        
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("❌ Отмена", callback_data="cancel_add_employee")
+        ]])
+        
+        if update.callback_query:
+            await update.callback_query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
+        elif update.message:
+            await update.message.reply_text(text, reply_markup=keyboard, parse_mode='Markdown')
+        
+        return EMPLOYEE_USERNAME
+    except Exception as e:
+        logger.error(f"Ошибка в start_add_employee: {e}", exc_info=True)
+        return -1
+
+
+async def receive_employee_username(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Получение username сотрудника"""
+    try:
+        if not update.message or not update.message.text:
+            logger.error("Нет сообщения или текста в receive_employee_username")
+            return -1
+        
+        username = update.message.text.strip()
+        
+        # Убираем @ если пользователь его ввел
+        if username.startswith('@'):
+            username = username[1:]
+        
+        if len(username) < 3:
+            await update.message.reply_text("❌ Username слишком короткий (минимум 3 символа). Попробуйте снова:")
+            return EMPLOYEE_USERNAME
+        
+        if len(username) > 32:
+            await update.message.reply_text("❌ Username слишком длинный (максимум 32 символа). Попробуйте снова:")
+            return EMPLOYEE_USERNAME
+        
+        context.user_data['adding_employee']['username'] = username
+        logger.info(f"Username сотрудника получен: {username}")
+        
+        text = (
+            "👥 **ДОБАВЛЕНИЕ СОТРУДНИКА**\n\n"
+            "Шаг 2/2: Инициалы сотрудника\n\n"
+            "Выберите инициалы или введите свои:"
+        )
+        
+        from menu import get_initials_menu
+        keyboard = get_initials_menu()
+        
+        await update.message.reply_text(text, reply_markup=keyboard, parse_mode='Markdown')
+        return EMPLOYEE_INITIALS
+    except Exception as e:
+        logger.error(f"Ошибка в receive_employee_username: {e}", exc_info=True)
+        return -1
+
+
+async def receive_employee_initials(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Получение инициалов сотрудника через кнопки"""
+    try:
+        if not update.callback_query or not update.callback_query.data:
+            logger.error("Нет callback_query или data в receive_employee_initials")
+            return -1
+        
+        data = update.callback_query.data
+        
+        if data == "cancel_add_employee":
+            return await cancel_add_employee(update, context)
+        
+        if data == "initials_other":
+            # Пользователь хочет ввести свои инициалы
+            text = (
+                "👥 **ДОБАВЛЕНИЕ СОТРУДНИКА**\n\n"
+                "Введите инициалы сотрудника (например, AB, CD, EF):"
+            )
+            keyboard = InlineKeyboardMarkup([[
+                InlineKeyboardButton("❌ Отмена", callback_data="cancel_add_employee")
+            ]])
+            await update.callback_query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
+            return EMPLOYEE_INITIALS_INPUT
+        
+        # Извлекаем инициалы из callback_data (формат: initials_AG)
+        if data.startswith("initials_"):
+            initials = data.split("_")[1]
+            context.user_data['adding_employee']['initials'] = initials
+            await update.callback_query.answer("✅ Инициалы выбраны")
+            
+            # Сохраняем сотрудника
+            return await finish_add_employee(update, context)
+        else:
+            await update.callback_query.answer("❌ Неверный выбор", show_alert=True)
+            return EMPLOYEE_INITIALS
+            
+    except Exception as e:
+        logger.error(f"Ошибка в receive_employee_initials: {e}", exc_info=True)
+        return -1
+
+
+async def receive_employee_initials_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Получение инициалов сотрудника через ввод текста"""
+    try:
+        if not update.message or not update.message.text:
+            logger.error("Нет сообщения или текста в receive_employee_initials_input")
+            return -1
+        
+        initials = update.message.text.strip().upper()
+        
+        if len(initials) < 2 or len(initials) > 10:
+            await update.message.reply_text("❌ Инициалы должны быть от 2 до 10 символов. Попробуйте снова:")
+            return EMPLOYEE_INITIALS_INPUT
+        
+        context.user_data['adding_employee']['initials'] = initials
+        logger.info(f"Инициалы сотрудника получены: {initials}")
+        
+        # Сохраняем сотрудника
+        return await finish_add_employee(update, context)
+    except Exception as e:
+        logger.error(f"Ошибка в receive_employee_initials_input: {e}", exc_info=True)
+        return -1
+
+
+async def finish_add_employee(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Завершение добавления сотрудника - сохранение в БД"""
+    try:
+        employee_data = context.user_data.get('adding_employee', {})
+        username = employee_data.get('username', '')
+        initials = employee_data.get('initials', '')
+        
+        if not username or not initials:
+            error_text = "❌ Ошибка: не все данные заполнены"
+            if update.callback_query:
+                await update.callback_query.answer(error_text, show_alert=True)
+            elif update.message:
+                await update.message.reply_text(error_text)
+            return -1
+        
+        # Получаем user_id из Telegram (попробуем найти пользователя)
+        user_id = None
+        try:
+            # Пытаемся получить user_id из базы данных, если пользователь уже есть
+            if 'db' in context.bot_data:
+                db = context.bot_data['db']
+                user_id = db.get_user_id_by_username(username)
+        except:
+            pass
+        
+        # Сохраняем сотрудника в БД
+        if 'db' in context.bot_data:
+            db = context.bot_data['db']
+        else:
+            from database import Database
+            db = Database()
+        
+        # Сохраняем (user_id может быть None, если пользователь еще не взаимодействовал с ботом)
+        db.save_user_id(username, user_id, initials)
+        
+        text = (
+            f"✅ **СОТРУДНИК ДОБАВЛЕН!**\n\n"
+            f"👤 Username: @{username}\n"
+            f"📝 Инициалы: {initials}\n"
+            f"🆔 ID: {user_id if user_id else 'Будет установлен при первом взаимодействии'}"
+        )
+        
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("🔙 К команде", callback_data="menu_team"),
+            InlineKeyboardButton("🏠 В главное меню", callback_data="menu_main")
+        ]])
+        
+        if update.callback_query:
+            await update.callback_query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
+            await update.callback_query.answer("✅ Сотрудник успешно добавлен!")
+        elif update.message:
+            await update.message.reply_text(text, reply_markup=keyboard, parse_mode='Markdown')
+        
+        # Очищаем данные
+        context.user_data.pop('adding_employee', None)
+        
+        logger.info(f"Сотрудник @{username} добавлен с инициалами {initials}")
+        return -1  # Завершаем диалог
+        
+    except Exception as e:
+        logger.error(f"Ошибка в finish_add_employee: {e}", exc_info=True)
+        if update.callback_query:
+            await update.callback_query.answer("❌ Произошла ошибка", show_alert=True)
+        return -1
+
+
+async def cancel_add_employee(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Отмена добавления сотрудника"""
+    try:
+        context.user_data.pop('adding_employee', None)
+        
+        text = "❌ Добавление сотрудника отменено."
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("🔙 К команде", callback_data="menu_team"),
+            InlineKeyboardButton("🏠 В главное меню", callback_data="menu_main")
+        ]])
+        
+        if update.callback_query:
+            await update.callback_query.edit_message_text(text, reply_markup=keyboard)
+            await update.callback_query.answer("Добавление сотрудника отменено")
+        elif update.message:
+            await update.message.reply_text(text, reply_markup=keyboard)
+        
+        logger.info("Добавление сотрудника отменено пользователем")
+        return -1  # Завершаем диалог
+    except Exception as e:
+        logger.error(f"Ошибка в cancel_add_employee: {e}", exc_info=True)
         return -1
 
 

@@ -23,6 +23,9 @@ def get_main_menu() -> InlineKeyboardMarkup:
             InlineKeyboardButton("📝 Создать задачу", callback_data="menu_create_task")
         ],
         [
+            InlineKeyboardButton("👥 Команда", callback_data="menu_team")
+        ],
+        [
             InlineKeyboardButton("🧪 Тестирование", callback_data="menu_testing"),
             InlineKeyboardButton("❓ Помощь", callback_data="menu_help")
         ]
