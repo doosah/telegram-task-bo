@@ -603,6 +603,14 @@ async def handle_delay_reason(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка нажатий на кнопки"""
     try:
+        # Получаем db из context.bot_data в самом начале
+        db = context.bot_data.get('db')
+        if not db:
+            logger.error("База данных не найдена в bot_data")
+            if update.callback_query:
+                await update.callback_query.answer("❌ Ошибка: база данных не найдена", show_alert=True)
+            return
+        
         # Проверка на спам перед обработкой (для callback_query проверяем пользователя)
         user = update.effective_user if update.effective_user else None
         if user and db.is_user_blocked(user.id):
@@ -629,27 +637,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Если это menu_create_task, menu_add_employee, team_add или weekly_add, просто возвращаемся - ConversationHandler должен перехватить
         if data == "menu_create_task" or data == "menu_add_employee" or data == "team_add" or data == "weekly_add":
             return  # Не обрабатываем здесь, пусть ConversationHandler перехватит
-        
-        # Обработка редактирования еженедельных задач через текст
-        if context.user_data.get('weekly_edit_state'):
-            task_id = context.user_data.get('weekly_edit_task_id')
-            if task_id and update.message:
-                task_text = update.message.text.strip()
-                if len(task_text) < 3:
-                    await update.message.reply_text("❌ Текст задачи должен быть не менее 3 символов. Попробуйте снова:")
-                    return
-                
-                db = context.bot_data.get('db')
-                if db:
-                    db.update_weekly_task(task_id, task_text=task_text)
-                    from menu import get_weekly_tasks_menu
-                    text = f"✅ **ЗАДАЧА ОБНОВЛЕНА**\n\n📝 Новый текст: {task_text}"
-                    await update.message.reply_text(text, reply_markup=get_weekly_tasks_menu(), parse_mode='Markdown')
-                    context.user_data.pop('weekly_edit_state', None)
-                    context.user_data.pop('weekly_edit_task_id', None)
-                else:
-                    await update.message.reply_text("❌ Ошибка: база данных не найдена")
-            return
         
         if data.startswith("menu_"):
             await handle_menu_callback(query, data, context, db)
