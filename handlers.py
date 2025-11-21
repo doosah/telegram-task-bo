@@ -260,7 +260,8 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
         elif data == "weekly_view":
             from menu import get_weekly_day_menu
             text = "📋 **ПРОСМОТР ЗАДАЧ**\n\nВыберите день недели:"
-            await safe_edit_message(query, text, get_weekly_day_menu())
+            keyboard = get_weekly_day_menu()
+            await safe_edit_message(query, text, keyboard)
         
         elif data.startswith("weekly_day_"):
             day = int(data.split("_")[-1])

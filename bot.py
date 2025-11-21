@@ -647,6 +647,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await handle_menu_callback(query, data, context, db)
             return
         
+        # Обработка еженедельных задач (weekly_view, weekly_edit, weekly_delete и т.д.)
+        if data.startswith("weekly_"):
+            await handle_menu_callback(query, data, context, db)
+            return
+        
         # Обработка тестирования (test_daily_tasks, test_employees)
         if data.startswith("test_"):
             await handle_menu_callback(query, data, context, db)
