@@ -634,6 +634,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await handle_menu_callback(query, data, context, db)
             return
         
+        # Обработка кнопок команды (team_list_btn, team_remove, team_earned и т.д.)
+        if data.startswith("team_"):
+            await handle_menu_callback(query, data, context, db)
+            return
+        
         # Обработка тестирования (test_daily_tasks, test_employees)
         if data.startswith("test_"):
             await handle_menu_callback(query, data, context, db)

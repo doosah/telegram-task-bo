@@ -209,9 +209,6 @@ def get_team_menu() -> InlineKeyboardMarkup:
             InlineKeyboardButton("🗑️ Удалить", callback_data="team_remove")
         ],
         [
-            InlineKeyboardButton("💰 Сотрудник заработал", callback_data="team_earned")
-        ],
-        [
             InlineKeyboardButton("🔙 Назад в меню", callback_data="menu_main")
         ]
     ]
