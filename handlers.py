@@ -705,7 +705,7 @@ async def handle_new_task_callback(query, data: str, context: ContextTypes.DEFAU
             keyboard = InlineKeyboardMarkup([[
                 InlineKeyboardButton("🔙 К задачам", callback_data="menu_view_tasks")
             ]])
-            await safe_edit_message(query, )
+            await safe_edit_message(query, text, keyboard)
         
         elif action == "share":
             text = f"📤 Задача будет отправлена в общий чат"
