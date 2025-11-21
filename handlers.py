@@ -31,7 +31,7 @@ def build_status_line(team_initials: list, in_progress: list, completed: list) -
 async def safe_edit_message(query, text: str, reply_markup=None, parse_mode='Markdown'):
     """Безопасное редактирование сообщения с обработкой ошибки 'Message is not modified'"""
     try:
-        await safe_edit_message(query, )
+        await query.edit_message_text(text, reply_markup=reply_markup, parse_mode=parse_mode)
     except Exception as e:
         error_msg = str(e)
         if "Message is not modified" in error_msg:
@@ -473,7 +473,7 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
                 keyboard = InlineKeyboardMarkup([[
                     InlineKeyboardButton("🔙 К тестированию", callback_data="menu_testing")
                 ]])
-                await safe_edit_message(query, )
+                await safe_edit_message(query, text, keyboard)
             except Exception as e:
                 logger.error(f"Ошибка отправки кнопок присутствия: {e}", exc_info=True)
                 try:
@@ -481,7 +481,7 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
                     keyboard = InlineKeyboardMarkup([[
                         InlineKeyboardButton("🔙 К тестированию", callback_data="menu_testing")
                     ]])
-                    await safe_edit_message(query, )
+                    await safe_edit_message(query, text, keyboard)
                 except:
                     await query.answer(f"❌ Ошибка: {str(e)[:100]}", show_alert=True)
         
