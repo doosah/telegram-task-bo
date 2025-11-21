@@ -185,9 +185,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Сохраняем пользователя в БД
         if user.username:
             user_mapping = {
-                "alex301182": {"initials": "GA", "name": "ГА", "full_name": "Lysenko Alexander"},
-                "Korudirp": {"initials": "К", "name": "К", "full_name": "Cherenkov Ruslan"},
-                "sanya_hui_sosi1488": {"initials": "С", "name": "С", "full_name": "Test"}
+                "alex301182": {"initials": "AG", "name": "АГ", "full_name": "Lysenko Alexander"},
+                "Korudirp": {"initials": "KA", "name": "КА", "full_name": "Cherenkov Ruslan"}
             }
             if user.username in user_mapping:
                 db.save_user_id(user.username, user.id, user_mapping[user.username]["initials"])
@@ -468,7 +467,7 @@ async def handle_delay_reason(update: Update, context: ContextTypes.DEFAULT_TYPE
             db = Database()
         
         from datetime import datetime
-        time_str = datetime.now().strftime("%H:%M")
+        time_str = datetime.now(MOSCOW_TZ).strftime("%H:%M")
         db.save_presence(username, user_id, "late", time=time_str, delay_minutes=delay_minutes, reason=reason)
         
         # Отправляем уведомление администратору
@@ -759,9 +758,8 @@ async def send_reminders(app: Application):
     
     # Получаем невыполненные задачи для каждого пользователя
     user_mapping = {
-        "GA": {"username": "alex301182", "initials": "ГА"},
-        "К": {"username": "Korudirp", "initials": "К"},
-        "С": {"username": "sanya_hui_sosi1488", "initials": "С"}
+        "AG": {"username": "alex301182", "initials": "AG"},
+        "KA": {"username": "Korudirp", "initials": "KA"}
     }
     
     # Собираем невыполненные задачи для каждого пользователя
@@ -960,8 +958,7 @@ async def send_presence_reminder(app: Application):
         # Получаем список всех пользователей
         all_users = [
             {"username": "alex301182", "name": "Lysenko Alexander", "user_id": None},
-            {"username": "Korudirp", "name": "Ruslan Cherenkov", "user_id": None},
-            {"username": "sanya_hui_sosi1488", "name": "Test", "user_id": None}
+            {"username": "Korudirp", "name": "Ruslan Cherenkov", "user_id": None}
         ]
         
         # Получаем user_id для каждого пользователя
@@ -1037,76 +1034,20 @@ def setup_scheduler(app: Application):
     # 08:00 - задачи на день
     scheduler.add_job(
         send_morning_tasks,
-        trigger=CronTrigger(hour=8, minute=0, day_of_week='mon-fri'),
-        args=[app]
-    )
-    
-    # 13:00 - напоминания
-    scheduler.add_job(
-        send_reminders,
-        trigger=CronTrigger(hour=13, minute=0, day_of_week='mon-fri'),
+        trigger=CronTrigger(hour=8, minute=0, day_of_week='mon-fri', timezone=MOSCOW_TZ),
         args=[app]
     )
     
     # 16:50 - итоги дня
     scheduler.add_job(
         send_evening_summary,
-        trigger=CronTrigger(hour=16, minute=50, day_of_week='mon-fri'),
+        trigger=CronTrigger(hour=16, minute=50, day_of_week='mon-fri', timezone=MOSCOW_TZ),
         args=[app]
     )
     
-    # 07:50 - кнопки присутствия
-    scheduler.add_job(
-        send_presence_buttons,
-        trigger=CronTrigger(hour=7, minute=50, day_of_week='mon-fri'),
-        args=[app]
-    )
-    
-    # 08:30 - напоминание о присутствии для тех, кто не отметился
-    scheduler.add_job(
-        send_presence_reminder,
-        trigger=CronTrigger(hour=8, minute=30, day_of_week='mon-fri'),
-        args=[app]
-    )
-    
-    # Напоминания о ручных задачах:
-    # 9:00 - ежедневные напоминания (за несколько дней до дедлайна) и в день дедлайна
-    scheduler.add_job(
-        send_custom_task_reminders,
-        trigger=CronTrigger(hour=9, minute=0, day_of_week='mon-fri'),
-        args=[app]
-    )
-    
-    # 12:00 - напоминания в день дедлайна
-    scheduler.add_job(
-        send_custom_task_reminders,
-        trigger=CronTrigger(hour=12, minute=0, day_of_week='mon-fri'),
-        args=[app]
-    )
-    
-    # 14:00 - напоминания в день дедлайна
-    scheduler.add_job(
-        send_custom_task_reminders,
-        trigger=CronTrigger(hour=14, minute=0, day_of_week='mon-fri'),
-        args=[app]
-    )
-    
-    # 16:00 - напоминания в день дедлайна
-    scheduler.add_job(
-        send_custom_task_reminders,
-        trigger=CronTrigger(hour=16, minute=0, day_of_week='mon-fri'),
-        args=[app]
-    )
-    
-    # Каждые 15 минут - проверка напоминаний для задач на день (за 4ч, 2ч, 1ч, 30мин)
-    scheduler.add_job(
-        send_custom_task_reminders,
-        trigger=CronTrigger(minute='*/15', day_of_week='mon-fri'),
-        args=[app]
-    )
     
     scheduler.start()
-    logger.info("Расписание настроено: 07:50 (присутствие), 08:00, 08:30 (напоминание о присутствии), 13:00, 16:50 (пн-пт), напоминания о ручных задачах")
+    logger.info("Расписание настроено: 08:00 (задачи), 16:50 (итоги дня)")
 
 
 def main():
@@ -1146,7 +1087,6 @@ def main():
         
         # Сохраняем функции для тестирования
         application.bot_data['send_morning_tasks'] = send_morning_tasks
-        application.bot_data['send_presence_buttons'] = send_presence_buttons
         logger.info("Функции тестирования сохранены в bot_data")
         
         # Регистрируем обработчики команд
@@ -1179,13 +1119,7 @@ def main():
         ), group=0)
         logger.info("Глобальный фильтр спама зарегистрирован")
         
-        # Регистрируем обработчик причины опоздания (должен быть ДО ConversationHandlers)
-        # Этот обработчик будет перехватывать текстовые сообщения, когда пользователь вводит причину опоздания
-        application.add_handler(MessageHandler(
-            filters.TEXT & ~filters.COMMAND,
-            handle_delay_reason
-        ), group=1)  # Группа 1, чтобы он обрабатывался после ConversationHandlers
-        logger.info("Обработчик причины опоздания зарегистрирован")
+        
         
         # Регистрируем ConversationHandler для создания задач
         from conversations import (

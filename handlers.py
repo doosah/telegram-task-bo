@@ -4,6 +4,7 @@
 
 import logging
 from datetime import datetime
+import pytz
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
@@ -89,9 +90,7 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
             text = (
                 "❓ **ПОМОЩЬ**\n\n"
                 "📝 **Создать задачу** - добавить новую задачу\n\n"
-                "🧪 **Тестирование** - тестовые функции бота\n\n"
-                "⏰ **Отметка присутствия**\n"
-                "Каждый день в 07:50 в общем чате появляются кнопки для отметки присутствия."
+                "🧪 **Тестирование** - тестовые функции бота"
             )
             keyboard = InlineKeyboardMarkup([[
                 InlineKeyboardButton("🔙 Назад в меню", callback_data="menu_main")
@@ -205,7 +204,7 @@ async def handle_presence_callback(query, data: str, context: ContextTypes.DEFAU
         
         if data == "presence_here":
             # На рабочем месте - отправляем сообщение в общий чат
-            time_str = datetime.now().strftime("%H:%M")
+            time_str = datetime.now(MOSCOW_TZ).strftime("%H:%M")
             db.save_presence(username, user_id, "here", time=time_str)
             
             # Отправляем сообщение в общий чат от пользователя
@@ -302,8 +301,7 @@ async def handle_delay_callback(query, data: str, context: ContextTypes.DEFAULT_
                     # Маппинг username -> имя для опозданий
                     user_name_mapping = {
                         "alex301182": "Lysenko Alexander",
-                        "Korudirp": "Ruslan Cherenkov",
-                        "sanya_hui_sosi1488": "Test"
+                        "Korudirp": "Ruslan Cherenkov"
                     }
                     
                     # Получаем имя пользователя
@@ -335,7 +333,7 @@ async def handle_delay_callback(query, data: str, context: ContextTypes.DEFAULT_
                 await query.answer("✅ Сообщение отправлено в общий чат")
             
             # Сохраняем в БД
-            time_str = datetime.now().strftime("%H:%M")
+            time_str = datetime.now(MOSCOW_TZ).strftime("%H:%M")
             db.save_presence(username, user_id, "late", time=time_str, delay_minutes=delay_minutes)
     
     except Exception as e:
@@ -443,8 +441,7 @@ async def handle_old_task_callback(query, data: str, context: ContextTypes.DEFAU
         # Маппинг пользователей
         user_mapping = {
             "alex301182": {"initials": "AG", "name": "АГ"},
-            "Korudirp": {"initials": "KA", "name": "КА"},
-            "sanya_hui_sosi1488": {"initials": "SA", "name": "СА"}
+            "Korudirp": {"initials": "KA", "name": "КА"}
         }
         
         # Определяем инициалы пользователя
@@ -485,17 +482,16 @@ async def handle_old_task_callback(query, data: str, context: ContextTypes.DEFAU
         # Получаем статусы всех пользователей для этой задачи
         status_ag = db.get_task_status(f"{task_id}_AG")
         status_ka = db.get_task_status(f"{task_id}_KA")
-        status_sa = db.get_task_status(f"{task_id}_SA")
         
-        logger.info(f"Статусы: AG={status_ag}, KA={status_ka}, SA={status_sa}")
+        logger.info(f"Статусы: AG={status_ag}, KA={status_ka}")
         
         # Определяем общий статус задачи
         # ✅ только если все выполнили
-        if status_ag == "✅" and status_ka == "✅" and status_sa == "✅":
+        if status_ag == "✅" and status_ka == "✅":
             overall_status = "✅"
         else:
             # Считаем количество исполнителей, которые взяли задачу (⏳ или ✅)
-            active_count = sum(1 for status in [status_ag, status_ka, status_sa] if status in ["⏳", "✅"])
+            active_count = sum(1 for status in [status_ag, status_ka] if status in ["⏳", "✅"])
             
             if active_count > 0:
                 # Показываем количество исполнителей эмодзи 👤
@@ -663,7 +659,7 @@ async def handle_work_task_take(query, data: str, context: ContextTypes.DEFAULT_
         try:
             task_id = int(parts[2])
             assignee = parts[3]
-            if assignee not in ["AG", "KA", "SA"]:
+            if assignee not in ["AG", "KA"]:
                 await query.answer("❌ Неверный исполнитель", show_alert=True)
                 return
         except (ValueError, IndexError):
@@ -690,8 +686,7 @@ async def handle_work_task_take(query, data: str, context: ContextTypes.DEFAULT_
             try:
                 assignee_names = {
                     "AG": "Lysenko Alexander",
-                    "KA": "Ruslan Cherenkov",
-                    "SA": "Test"
+                    "KA": "Ruslan Cherenkov"
                 }
                 assignee_name = assignee_names.get(assignee, assignee)
                 
@@ -732,8 +727,7 @@ async def handle_work_task_take(query, data: str, context: ContextTypes.DEFAULT_
                 chat_id = int(chat_id) if isinstance(chat_id, str) else chat_id
                 assignee_names = {
                     "AG": "Lysenko Alexander",
-                    "KA": "Ruslan Cherenkov",
-                    "SA": "Test"
+                    "KA": "Ruslan Cherenkov"
                 }
                 assignee_name = assignee_names.get(assignee, assignee)
                 
@@ -759,8 +753,7 @@ async def handle_work_task_take(query, data: str, context: ContextTypes.DEFAULT_
                         if button.callback_data == data:
                             assignee_names = {
                                 "AG": "Lysenko Alexander",
-                                "KA": "Ruslan Cherenkov",
-                                "SA": "Test"
+                                "KA": "Ruslan Cherenkov"
                             }
                             assignee_name = assignee_names.get(assignee, assignee)
                             new_row.append(InlineKeyboardButton(
@@ -781,8 +774,7 @@ async def handle_work_task_take(query, data: str, context: ContextTypes.DEFAULT_
         try:
             assignee_names = {
                 "AG": "Lysenko Alexander",
-                "KA": "Ruslan Cherenkov",
-                "SA": "Test"
+                "KA": "Ruslan Cherenkov"
             }
             confirm_text = (
                 f"📋 **ЗАДАЧА #{task_id} ВЗЯТА В РАБОТУ**\n\n"
@@ -820,7 +812,7 @@ async def handle_work_task_done(query, data: str, context: ContextTypes.DEFAULT_
         try:
             task_id = int(parts[2])
             assignee = parts[3]
-            if assignee not in ["AG", "KA", "SA"]:
+            if assignee not in ["AG", "KA"]:
                 await query.answer("❌ Неверный исполнитель", show_alert=True)
                 return
         except (ValueError, IndexError):
@@ -862,8 +854,8 @@ async def handle_work_task_done(query, data: str, context: ContextTypes.DEFAULT_
                 completed_assignees=completed_str
             )
             
-            # Проверяем, все ли исполнители завершили (AG, KA, SA)
-            all_assignees = ['AG', 'KA', 'SA']
+            # Проверяем, все ли исполнители завершили (AG, KA)
+            all_assignees = ['AG', 'KA']
             all_completed = all(assignee_code in completed_list for assignee_code in all_assignees)
             
             if all_completed:
@@ -892,8 +884,7 @@ async def handle_work_task_done(query, data: str, context: ContextTypes.DEFAULT_
                 chat_id = int(chat_id) if isinstance(chat_id, str) else chat_id
                 assignee_names = {
                     "AG": "Lysenko Alexander",
-                    "KA": "Ruslan Cherenkov",
-                    "SA": "Test"
+                    "KA": "Ruslan Cherenkov"
                 }
                 assignee_name = assignee_names.get(assignee, assignee)
                 
@@ -904,7 +895,7 @@ async def handle_work_task_done(query, data: str, context: ContextTypes.DEFAULT_
                     updated_task = db.get_custom_task(task_id)
                     completed_assignees = updated_task.get('completed_assignees', '') or ''
                     completed_list = completed_assignees.split(',') if completed_assignees else []
-                    all_assignees = ['AG', 'KA', 'SA']
+                    all_assignees = ['AG', 'KA']
                     all_completed = all(assignee_code in completed_list for assignee_code in all_assignees)
                     
                     if all_completed:
@@ -913,7 +904,7 @@ async def handle_work_task_done(query, data: str, context: ContextTypes.DEFAULT_
                             f"📝 Задача: {task['title']}\n"
                             f"👤 Все исполнители завершили работу\n"
                             f"🆔 ID задачи: #{task_id}\n"
-                            f"🕐 Время: {datetime.now().strftime('%H:%M')}"
+                            f"🕐 Время: {datetime.now(MOSCOW_TZ).strftime('%H:%M')}"
                         )
                     else:
                         # Еще не все завершили
@@ -925,7 +916,7 @@ async def handle_work_task_done(query, data: str, context: ContextTypes.DEFAULT_
                             f"👤 {assignee_name} завершил свою часть\n"
                             f"⏳ Ожидаются: {', '.join(remaining_names)}\n"
                             f"🆔 ID задачи: #{task_id}\n"
-                            f"🕐 Время: {datetime.now().strftime('%H:%M')}"
+                            f"🕐 Время: {datetime.now(MOSCOW_TZ).strftime('%H:%M')}"
                         )
                 else:
                     completion_text = (
@@ -933,7 +924,7 @@ async def handle_work_task_done(query, data: str, context: ContextTypes.DEFAULT_
                         f"📝 Задача: {task['title']}\n"
                         f"👤 Исполнитель: {assignee_name}\n"
                         f"🆔 ID задачи: #{task_id}\n"
-                        f"🕐 Время: {datetime.now().strftime('%H:%M')}"
+                        f"🕐 Время: {datetime.now(MOSCOW_TZ).strftime('%H:%M')}"
                     )
                 await context.bot.send_message(
                     chat_id=chat_id,
@@ -960,8 +951,7 @@ async def handle_work_task_done(query, data: str, context: ContextTypes.DEFAULT_
                         if f"work_take_{task_id}_{assignee}" in button.callback_data or f"work_done_{task_id}_{assignee}" in button.callback_data:
                             assignee_names = {
                                 "AG": "Lysenko Alexander",
-                                "KA": "Ruslan Cherenkov",
-                                "SA": "Test"
+                                "KA": "Ruslan Cherenkov"
                             }
                             assignee_name = assignee_names.get(assignee, assignee)
                             new_row.append(InlineKeyboardButton(
@@ -993,4 +983,6 @@ async def handle_work_task_done(query, data: str, context: ContextTypes.DEFAULT_
     except Exception as e:
         logger.error(f"Ошибка в handle_work_task_done: {e}", exc_info=True)
         await query.answer("❌ Произошла ошибка", show_alert=True)
+
+MOSCOW_TZ = pytz.timezone('Europe/Moscow')
 

@@ -220,7 +220,7 @@ async def receive_assignee(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         
         assignee = parts[1]
         
-        if assignee not in ["AG", "KA", "SA", "all"]:
+        if assignee not in ["AG", "KA", "all"]:
             await update.callback_query.answer("❌ Неверный выбор исполнителя", show_alert=True)
             return ASSIGNEE
         
@@ -316,7 +316,6 @@ async def finish_create_task(update: Update, context: ContextTypes.DEFAULT_TYPE)
             assignee_names = {
                 "AG": "Lysenko Alexander",
                 "KA": "Ruslan Cherenkov",
-                "SA": "Test",
                 "all": "Все"
             }
             
@@ -362,11 +361,10 @@ async def finish_create_task(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     work_buttons = []
                     if assignee == "all":
                         # Если исполнитель "Все", показываем кнопки "Взять в работу" для всех
-                        # Используем правильные коды: AG, KA, SA
+                        
                         work_buttons = [
                             [InlineKeyboardButton("👤 Lysenko Alexander - Взять в работу", callback_data=f"work_take_{task_id}_AG")],
                             [InlineKeyboardButton("👤 Ruslan Cherenkov - Взять в работу", callback_data=f"work_take_{task_id}_KA")],
-                            [InlineKeyboardButton("👤 Test - Взять в работу", callback_data=f"work_take_{task_id}_SA")]
                         ]
                     else:
                         # Если конкретный исполнитель, показываем только кнопку "Взять в работу"
@@ -685,7 +683,7 @@ async def receive_edit_assignee(update: Update, context: ContextTypes.DEFAULT_TY
         
         assignee = parts[1]
         
-        if assignee not in ["AG", "KA", "SA", "all"]:
+        if assignee not in ["AG", "KA", "all"]:
             await update.callback_query.answer("❌ Неверный выбор исполнителя", show_alert=True)
             return EDIT_ASSIGNEE
         
@@ -713,7 +711,6 @@ async def receive_edit_assignee(update: Update, context: ContextTypes.DEFAULT_TY
         assignee_names = {
             "AG": "Lysenko Alexander",
             "KA": "Ruslan Cherenkov",
-            "SA": "Test",
             "all": "Все"
         }
         
@@ -1133,7 +1130,7 @@ async def start_work_task(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         try:
             task_id = int(parts[2])
             assignee = parts[3]
-            if assignee not in ["AG", "KA", "SA"]:
+            if assignee not in ["AG", "KA"]:
                 await query.answer("❌ Неверный исполнитель", show_alert=True)
                 return -1
         except (ValueError, IndexError):

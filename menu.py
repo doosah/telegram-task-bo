@@ -37,9 +37,6 @@ def get_testing_menu() -> InlineKeyboardMarkup:
             InlineKeyboardButton("📋 Ежедневные задачи", callback_data="test_daily_tasks")
         ],
         [
-            InlineKeyboardButton("👥 Контроль сотрудников", callback_data="test_employees")
-        ],
-        [
             InlineKeyboardButton("🔙 Назад в меню", callback_data="menu_main")
         ]
     ]
@@ -139,7 +136,6 @@ def get_assignee_menu() -> InlineKeyboardMarkup:
             InlineKeyboardButton("👤 Ruslan Cherenkov", callback_data="assignee_KA")
         ],
         [
-            InlineKeyboardButton("👤 Test", callback_data="assignee_SA"),
             InlineKeyboardButton("👥 Все", callback_data="assignee_all")
         ],
         [

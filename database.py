@@ -120,8 +120,7 @@ class Database:
                 # Добавляем начальных пользователей, если их еще нет
                 initial_users = [
                     ('alex301182', None, 'AG'),
-                    ('Korudirp', None, 'KA'),
-                    ('sanya_hui_sosi1488', None, 'SA')
+                    ('Korudirp', None, 'KA')
                 ]
                 
                 cursor.executemany('''
@@ -191,7 +190,7 @@ class Database:
         Сохранить ID пользователя
         username - имя пользователя в Telegram (например, "alex301182")
         user_id - ID пользователя в Telegram
-        initials - инициалы (AG, KA или SA)
+        initials - инициалы (AG, KA)
         """
         try:
             with db_lock:
