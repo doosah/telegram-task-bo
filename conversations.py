@@ -1917,10 +1917,19 @@ async def start_team_add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     try:
         query = update.callback_query
         await query.answer()
-        text = "Введите @username сотрудника"
-        await query.edit_message_text(text, parse_mode='Markdown')
+        context.user_data['team_add_username'] = None
+        text = (
+            "👥 **ДОБАВЛЕНИЕ СОТРУДНИКА**\n\n"
+            "Шаг 1/2: Username сотрудника\n\n"
+            "Введите @username сотрудника (без символа @):"
+        )
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("❌ Отмена", callback_data="team_init_cancel")
+        ]])
+        await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
         return TEAM_USERNAME
-    except Exception:
+    except Exception as e:
+        logger.error(f"Ошибка в start_team_add: {e}", exc_info=True)
         return -1
 
 async def receive_team_username(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -2015,5 +2024,27 @@ async def receive_team_custom_initials(update: Update, context: ContextTypes.DEF
     except Exception as e:
         logger.error(f"Ошибка в receive_team_custom_initials: {e}", exc_info=True)
         await update.message.reply_text("❌ Произошла ошибка при добавлении сотрудника")
+        return -1
+
+
+async def cancel_team_add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Отмена добавления сотрудника через team_add"""
+    try:
+        context.user_data.pop('team_add_username', None)
+        
+        text = "❌ **ОТМЕНА**\n\nДобавление сотрудника отменено."
+        from menu import get_team_menu
+        keyboard = get_team_menu()
+        
+        if update.callback_query:
+            await update.callback_query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
+            await update.callback_query.answer("Отменено")
+        elif update.message:
+            await update.message.reply_text(text, reply_markup=keyboard, parse_mode='Markdown')
+        
+        logger.info("Добавление сотрудника отменено пользователем")
+        return -1
+    except Exception as e:
+        logger.error(f"Ошибка в cancel_team_add: {e}", exc_info=True)
         return -1
 

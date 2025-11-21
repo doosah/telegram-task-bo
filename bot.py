@@ -1306,10 +1306,10 @@ def main():
                 ]
             },
             fallbacks=[
-                CallbackQueryHandler(lambda u, c: -1, pattern="^team_init_cancel$"),
-                CommandHandler("cancel", lambda u, c: -1)
+                CallbackQueryHandler(cancel_team_add, pattern="^team_init_cancel$"),
+                CommandHandler("cancel", cancel_team_add)
             ],
-            name="add_employee_conversation"
+            name="add_employee_team_conversation"
         )
         
         # Старый ConversationHandler для menu_add_employee (оставляем для совместимости)
@@ -1333,7 +1333,7 @@ def main():
                 CallbackQueryHandler(cancel_add_employee, pattern="^cancel_add_employee$"),
                 CommandHandler("cancel", cancel_add_employee)
             ],
-            name="add_employee_conversation"
+            name="add_employee_old_conversation"
         )
         
         application.add_handler(add_employee_conv, group=2)
