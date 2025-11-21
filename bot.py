@@ -1210,7 +1210,9 @@ def main():
             skip_edit_title, skip_edit_description, skip_edit_deadline, cancel_edit_task,
             COMPLETE_RESULT, COMPLETE_PHOTO,
             start_complete_task, receive_complete_result, receive_complete_photo,
-            skip_complete_result, skip_complete_photo, complete_fast, cancel_complete_task
+            skip_complete_result, skip_complete_photo, complete_fast, cancel_complete_task,
+            TEAM_USERNAME, TEAM_INITIALS, TEAM_CUSTOM_INITIALS,
+            start_team_add, receive_team_username, receive_team_initials, receive_team_custom_initials
         )
         
         create_task_conv = ConversationHandler(

@@ -25,7 +25,7 @@ def build_status_line(team_initials: list, in_progress: list, completed: list) -
             symbols.append(f"{code}: ⏳")
         else:
             symbols.append(f"{code}: ⚪")
-    return "Статусы: " + " / ".join(symbols)
+    return "Статусы: " + " ".join([f"[{s}]" for s in symbols])
 
 
 async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_TYPE, db):
@@ -96,6 +96,21 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
                 "Выберите действие для тестирования:"
             )
             await query.edit_message_text(text, reply_markup=get_testing_menu(), parse_mode='Markdown')
+        
+        elif data == "menu_team":
+            from menu import get_team_menu
+            text = "👥 **УПРАВЛЕНИЕ КОМАНДОЙ**"
+            await query.edit_message_text(text, reply_markup=get_team_menu(), parse_mode='Markdown')
+        
+        elif data == "team_list_btn":
+            team = db.get_team()
+            if not team:
+                text = "👥 Список пуст"
+            else:
+                lines = [f"@{m.get('username')} ({m.get('initials')})" for m in team]
+                text = "👥 **КОМАНДА**\n\n" + "\n".join(lines)
+            from menu import get_team_menu
+            await query.edit_message_text(text, reply_markup=get_team_menu(), parse_mode='Markdown')
         
         elif data == "menu_help":
             text = (

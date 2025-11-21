@@ -408,8 +408,11 @@ async def finish_create_task(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     # Создаем кнопки: только "Взять в работу" (кнопка "Готово" появится после взятия в работу)
                     work_buttons = []
                     if assignee == "all":
+                        row = []
                         for code in team_initials:
-                            work_buttons.append([InlineKeyboardButton(f"👤 {code} - Взять в работу", callback_data=f"work_take_{task_id}_{code}")])
+                            row.append(InlineKeyboardButton(f"👤 {code} - Взять", callback_data=f"work_take_{task_id}_{code}"))
+                        if row:
+                            work_buttons.append(row)
                     else:
                         assignee_full = assignee_names.get(assignee, assignee)
                         work_buttons = [[InlineKeyboardButton(f"👤 {assignee_full} - Взять в работу", callback_data=f"work_take_{task_id}_{assignee}")]]
@@ -1673,5 +1676,67 @@ async def cancel_work_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return -1
     except Exception as e:
         logger.error(f"Ошибка в cancel_work_task: {e}", exc_info=True)
+        return -1
+
+from telegram.ext import ContextTypes
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from datetime import datetime
+import logging
+logger = logging.getLogger(__name__)
+
+TEAM_USERNAME, TEAM_INITIALS, TEAM_CUSTOM_INITIALS = range(3)
+
+async def start_team_add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    try:
+        query = update.callback_query
+        await query.answer()
+        text = "Введите @username сотрудника"
+        await query.edit_message_text(text, parse_mode='Markdown')
+        return TEAM_USERNAME
+    except Exception:
+        return -1
+
+async def receive_team_username(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    try:
+        username = update.message.text.strip().lstrip('@')
+        context.user_data['team_add_username'] = username
+        buttons = [
+            [InlineKeyboardButton("AG", callback_data="team_init_AG"), InlineKeyboardButton("KA", callback_data="team_init_KA")],
+            [InlineKeyboardButton("Другое", callback_data="team_init_other"), InlineKeyboardButton("Отмена", callback_data="team_init_cancel")]
+        ]
+        await update.message.reply_text("Выберите инициалы", reply_markup=InlineKeyboardMarkup(buttons))
+        return TEAM_INITIALS
+    except Exception:
+        return -1
+
+async def receive_team_initials(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    try:
+        query = update.callback_query
+        data = query.data
+        if data == 'team_init_cancel':
+            await query.answer("Отменено")
+            await query.edit_message_text("Отмена")
+            return -1
+        if data == 'team_init_other':
+            await query.edit_message_text("Введите инициалы")
+            return TEAM_CUSTOM_INITIALS
+        initials = data.split('_')[-1]
+        username = context.user_data.get('team_add_username')
+        db = context.bot_data.get('db')
+        db.save_user(username, initials)
+        await query.edit_message_text(f"✅ Добавлен: @{username} ({initials})")
+        return -1
+    except Exception:
+        return -1
+
+async def receive_team_custom_initials(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    try:
+        initials = update.message.text.strip().upper()
+        username = context.user_data.get('team_add_username')
+        db = context.bot_data.get('db')
+        db.save_user(username, initials)
+        await update.message.reply_text(f"✅ Добавлен: @{username} ({initials})")
+        return -1
+    except Exception:
         return -1
 

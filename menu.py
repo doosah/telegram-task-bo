@@ -25,6 +25,9 @@ def get_main_menu() -> InlineKeyboardMarkup:
         [
             InlineKeyboardButton("🧪 Тестирование", callback_data="menu_testing"),
             InlineKeyboardButton("❓ Помощь", callback_data="menu_help")
+        ],
+        [
+            InlineKeyboardButton("👥 Команда", callback_data="menu_team")
         ]
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -193,5 +196,17 @@ def get_delay_minutes_menu(hour: int) -> InlineKeyboardMarkup:
         InlineKeyboardButton("🔙 Назад", callback_data="presence_late")
     ])
     
+    return InlineKeyboardMarkup(keyboard)
+
+def get_team_menu() -> InlineKeyboardMarkup:
+    keyboard = [
+        [
+            InlineKeyboardButton("➕ Добавить сотрудника", callback_data="team_add"),
+            InlineKeyboardButton("📋 Список", callback_data="team_list_btn")
+        ],
+        [
+            InlineKeyboardButton("🔙 Назад в меню", callback_data="menu_main")
+        ]
+    ]
     return InlineKeyboardMarkup(keyboard)
 
