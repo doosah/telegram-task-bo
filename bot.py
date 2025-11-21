@@ -205,15 +205,15 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Сохраняем пользователя в БД
         if user.username:
             user_mapping = {
-                "alex301182": {"initials": "AG", "name": "АГ", "full_name": "Lysenko Alexander"},
-                "Korudirp": {"initials": "KA", "name": "КА", "full_name": "Cherenkov Ruslan"}
+                "alex301182": {"name": "Vesenko, Aleksandr"},
+                "Korudirp": {"name": "Cherenkov, Ruslan"}
             }
             if user.username in user_mapping:
-                db.save_user_id(user.username, user.id, user_mapping[user.username]["initials"])
+                db.save_user_id(user.username, user.id, user_mapping[user.username]["name"])
             
             # Если это администратор, сохраняем его ID
             if user.username == ADMIN_USERNAME:
-                db.save_user_id(ADMIN_USERNAME, user.id, "ADMIN")
+                db.save_user_id(ADMIN_USERNAME, user.id, "Admin")
                 context.bot_data['admin_id'] = user.id
                 logger.info(f"Admin ID сохранен: {user.id}")
         

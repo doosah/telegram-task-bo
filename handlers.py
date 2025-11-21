@@ -566,36 +566,31 @@ async def handle_old_task_callback(query, data: str, context: ContextTypes.DEFAU
         username = user.username if user.username else f"user_{user.id}"
         user_id = user.id
         
-        # Маппинг пользователей
-        user_mapping = {
-            "alex301182": {"initials": "AG", "name": "АГ"},
-            "Korudirp": {"initials": "KA", "name": "КА"}
-        }
+        # Получаем имя пользователя из БД
+        team = db.get_team()
+        user_name = username
+        for member in team:
+            if member.get('username') == username:
+                user_name = member.get('name', member.get('initials', username))
+                break
         
-        # Определяем инициалы пользователя
-        user_info = user_mapping.get(username)
-        if not user_info:
-            # Пробуем найти по user_id
-            for uname, info in user_mapping.items():
-                stored_id = db.get_user_id_by_username(uname)
-                if stored_id == user_id:
-                    user_info = info
-                    username = uname
-                    break
+        # Если пользователя нет в БД, используем username как имя
+        if user_name == username:
+            # Маппинг пользователей для обратной совместимости
+            user_mapping = {
+                "alex301182": "Vesenko, Aleksandr",
+                "Korudirp": "Cherenkov, Ruslan"
+            }
+            user_name = user_mapping.get(username, username)
         
-        if not user_info:
-            await query.answer("❌ Вы не авторизованы для работы с задачами", show_alert=True)
-            return
-        
-        initials = user_info["initials"]
-        logger.info(f"Пользователь: {username} ({initials})")
+        logger.info(f"Пользователь: {username} ({user_name})")
         
         # Сохраняем user_id в БД
-        db.save_user_id(username, user_id, initials)
+        db.save_user_id(username, user_id, user_name)
         logger.info(f"ID пользователя сохранен в БД")
         
         # Получаем текущий статус пользователя для этой задачи
-        status_key = f"{task_id}_{initials}"
+        status_key = f"{task_id}_{user_name}"
         current_status = db.get_task_status(status_key)
         logger.info(f"Текущий статус для {status_key}: {current_status}")
         

@@ -141,15 +141,28 @@ class Database:
                 ''')
                 
                 # Добавляем начальных пользователей, если их еще нет
-                initial_users = [
-                    ('alex301182', None, 'AG'),
-                    ('Korudirp', None, 'KA')
-                ]
+                # Проверяем, какие колонки есть в таблице
+                cursor.execute("PRAGMA table_info(users)")
+                columns = [row[1] for row in cursor.fetchall()]
                 
-                cursor.executemany('''
-                    INSERT OR IGNORE INTO users (username, user_id, initials)
-                    VALUES (?, ?, ?)
-                ''', initial_users)
+                if 'name' in columns:
+                    initial_users = [
+                        ('alex301182', None, 'Vesenko, Aleksandr'),
+                        ('Korudirp', None, 'Cherenkov, Ruslan')
+                    ]
+                    cursor.executemany('''
+                        INSERT OR IGNORE INTO users (username, user_id, name)
+                        VALUES (?, ?, ?)
+                    ''', initial_users)
+                elif 'initials' in columns:
+                    initial_users = [
+                        ('alex301182', None, 'AG'),
+                        ('Korudirp', None, 'KA')
+                    ]
+                    cursor.executemany('''
+                        INSERT OR IGNORE INTO users (username, user_id, initials)
+                        VALUES (?, ?, ?)
+                    ''', initial_users)
                 
                 conn.commit()
                 conn.close()
@@ -208,22 +221,42 @@ class Database:
             # Логируем ошибку, но не падаем
             logger_db.error(f"Ошибка сохранения статуса {task_key}={status}: {e}", exc_info=True)
     
-    def save_user_id(self, username: str, user_id: int, initials: str):
+    def save_user_id(self, username: str, user_id: int, name: str):
         """
         Сохранить ID пользователя
         username - имя пользователя в Telegram (например, "alex301182")
         user_id - ID пользователя в Telegram
-        initials - инициалы (AG, KA)
+        name - имя сотрудника (например, "Vesenko, Aleksandr")
         """
         try:
             with db_lock:
                 conn = self.get_connection()
                 try:
                     cursor = conn.cursor()
-                    cursor.execute('''
-                        INSERT OR REPLACE INTO users (username, user_id, initials)
-                        VALUES (?, ?, ?)
-                    ''', (username, user_id, initials))
+                    # Проверяем, какие колонки есть в таблице
+                    cursor.execute("PRAGMA table_info(users)")
+                    columns = [row[1] for row in cursor.fetchall()]
+                    
+                    if 'name' in columns:
+                        cursor.execute('''
+                            INSERT OR REPLACE INTO users (username, user_id, name)
+                            VALUES (?, ?, ?)
+                        ''', (username, user_id, name))
+                    elif 'initials' in columns:
+                        cursor.execute('''
+                            INSERT OR REPLACE INTO users (username, user_id, initials)
+                            VALUES (?, ?, ?)
+                        ''', (username, user_id, name))
+                    else:
+                        # Если нет ни name, ни initials - добавляем колонку name
+                        try:
+                            cursor.execute('ALTER TABLE users ADD COLUMN name TEXT')
+                        except sqlite3.OperationalError:
+                            pass
+                        cursor.execute('''
+                            INSERT OR REPLACE INTO users (username, user_id, name)
+                            VALUES (?, ?, ?)
+                        ''', (username, user_id, name))
                     conn.commit()
                 finally:
                     conn.close()
@@ -402,14 +435,25 @@ class Database:
                 conn = self.get_connection()
                 try:
                     cursor = conn.cursor()
-                    cursor.execute('SELECT username, user_id, initials FROM users ORDER BY initials')
+                    # Проверяем, какие колонки есть в таблице
+                    cursor.execute("PRAGMA table_info(users)")
+                    columns = [row[1] for row in cursor.fetchall()]
+                    
+                    if 'name' in columns:
+                        cursor.execute('SELECT username, user_id, name FROM users ORDER BY name')
+                    elif 'initials' in columns:
+                        cursor.execute('SELECT username, user_id, initials FROM users ORDER BY initials')
+                    else:
+                        cursor.execute('SELECT username, user_id FROM users ORDER BY username')
+                    
                     results = cursor.fetchall()
                     employees = []
                     for row in results:
                         employees.append({
                             'username': row[0],
                             'user_id': row[1],
-                            'initials': row[2]
+                            'name': row[2] if len(row) > 2 else "",
+                            'initials': row[2] if len(row) > 2 else ""  # Для обратной совместимости
                         })
                     return employees
                 finally:

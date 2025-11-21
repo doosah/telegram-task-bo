@@ -1370,12 +1370,13 @@ async def finish_add_employee(update: Update, context: ContextTypes.DEFAULT_TYPE
             db = Database()
         
         # Сохраняем (user_id может быть None, если пользователь еще не взаимодействовал с ботом)
+        # Используем initials как name (для обратной совместимости)
         db.save_user_id(username, user_id, initials)
         
         text = (
             f"✅ **СОТРУДНИК ДОБАВЛЕН!**\n\n"
             f"👤 Username: @{username}\n"
-            f"📝 Инициалы: {initials}\n"
+            f"📝 Имя: {initials}\n"
             f"🆔 ID: {user_id if user_id else 'Будет установлен при первом взаимодействии'}"
         )
         
