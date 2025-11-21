@@ -66,7 +66,7 @@ if not ADMIN_USERNAME:
 
 # Инициализация базы данных и задач
 db = Database()
-tasks_manager = Tasks()
+tasks_manager = Tasks(db)
 
 # Часовой пояс (Москва)
 MOSCOW_TZ = pytz.timezone('Europe/Moscow')
