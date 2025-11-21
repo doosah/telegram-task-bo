@@ -1287,7 +1287,7 @@ def main():
         # ConversationHandler для добавления сотрудника
         from conversations import (
             TEAM_USERNAME, TEAM_INITIALS, TEAM_CUSTOM_INITIALS,
-            start_team_add, receive_team_username, receive_team_initials, receive_team_custom_initials
+            start_team_add, receive_team_username, receive_team_initials, receive_team_custom_initials, cancel_team_add
         )
         
         add_employee_conv = ConversationHandler(
