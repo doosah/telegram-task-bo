@@ -55,14 +55,19 @@ class Database:
                     )
                 ''')
                 
-                # Миграция: переименовываем initials в name, если колонка name не существует
-                try:
-                    cursor.execute('ALTER TABLE users ADD COLUMN name TEXT')
-                    # Копируем данные из initials в name
-                    cursor.execute('UPDATE users SET name = initials WHERE name IS NULL OR name = ""')
-                    # Удаляем старую колонку initials (SQLite не поддерживает DROP COLUMN, поэтому просто игнорируем)
-                except sqlite3.OperationalError:
-                    pass
+                # Миграция: добавляем колонку name, если её нет
+                # Проверяем, какие колонки уже есть
+                cursor.execute("PRAGMA table_info(users)")
+                existing_columns = [row[1] for row in cursor.fetchall()]
+                
+                if 'name' not in existing_columns:
+                    try:
+                        cursor.execute('ALTER TABLE users ADD COLUMN name TEXT')
+                        # Если есть колонка initials, копируем данные из initials в name
+                        if 'initials' in existing_columns:
+                            cursor.execute('UPDATE users SET name = initials WHERE name IS NULL OR name = ""')
+                    except sqlite3.OperationalError as e:
+                        logger_db.warning(f"Ошибка добавления колонки name: {e}")
                 
                 # Миграция: переименовываем существующих пользователей
                 try:
