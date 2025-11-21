@@ -266,17 +266,36 @@ class Database:
                 conn = self.get_connection()
                 try:
                     cursor = conn.cursor()
-                    # Пытаемся получить name, если нет - используем initials (для обратной совместимости)
-                    try:
+                    # Проверяем, какие колонки есть в таблице
+                    cursor.execute("PRAGMA table_info(users)")
+                    columns = [row[1] for row in cursor.fetchall()]
+                    
+                    # Формируем запрос в зависимости от наличия колонок
+                    if 'name' in columns:
                         cursor.execute('SELECT username, user_id, name FROM users')
-                    except sqlite3.OperationalError:
+                    elif 'initials' in columns:
                         cursor.execute('SELECT username, user_id, initials FROM users')
+                    else:
+                        cursor.execute('SELECT username, user_id FROM users')
+                    
                     rows = cursor.fetchall()
-                    return [{"username": r[0], "user_id": r[1], "name": r[2] if len(r) > 2 else ""} for r in rows]
+                    result = []
+                    for r in rows:
+                        username = r[0] if len(r) > 0 else ""
+                        user_id = r[1] if len(r) > 1 else None
+                        name_or_initials = r[2] if len(r) > 2 else ""
+                        result.append({
+                            "username": username,
+                            "user_id": user_id,
+                            "name": name_or_initials,
+                            "initials": name_or_initials  # Для обратной совместимости
+                        })
+                    logger_db.info(f"Получено {len(result)} сотрудников из БД")
+                    return result
                 finally:
                     conn.close()
         except Exception as e:
-            logger_db.error("Ошибка получения команды", exc_info=True)
+            logger_db.error(f"Ошибка получения команды: {e}", exc_info=True)
             return []
 
     def get_team_initials(self) -> list:
