@@ -69,15 +69,19 @@ class Database:
                         completed_at TEXT,
                         result_text TEXT,
                         result_photo TEXT,
-                        completed_assignees TEXT
+                        completed_assignees TEXT,
+                        in_progress_assignees TEXT
                     )
                 ''')
                 
-                # Добавляем поле completed_assignees, если его еще нет
+                # Добавляем поля, если их еще нет
                 try:
                     cursor.execute('ALTER TABLE custom_tasks ADD COLUMN completed_assignees TEXT')
                 except sqlite3.OperationalError:
-                    # Поле уже существует, игнорируем ошибку
+                    pass
+                try:
+                    cursor.execute('ALTER TABLE custom_tasks ADD COLUMN in_progress_assignees TEXT')
+                except sqlite3.OperationalError:
                     pass
                 
                 # Таблица для отметок присутствия
@@ -120,8 +124,7 @@ class Database:
                 # Добавляем начальных пользователей, если их еще нет
                 initial_users = [
                     ('alex301182', None, 'AG'),
-                    ('Korudirp', None, 'KA'),
-                    ('sanya_hui_sosi1488', None, 'SA')
+                    ('Korudirp', None, 'KA')
                 ]
                 
                 cursor.executemany('''
@@ -191,7 +194,7 @@ class Database:
         Сохранить ID пользователя
         username - имя пользователя в Telegram (например, "alex301182")
         user_id - ID пользователя в Telegram
-        initials - инициалы (AG, KA или SA)
+        initials - инициалы (AG, KA)
         """
         try:
             with db_lock:
@@ -208,6 +211,64 @@ class Database:
         except Exception as e:
             # Логируем ошибку, но не падаем
             logger_db.error(f"Ошибка сохранения ID пользователя {username}: {e}", exc_info=True)
+
+    def save_user(self, username: str, initials: str):
+        try:
+            with db_lock:
+                conn = self.get_connection()
+                try:
+                    cursor = conn.cursor()
+                    cursor.execute('''
+                        INSERT OR REPLACE INTO users (username, user_id, initials)
+                        VALUES (?, COALESCE((SELECT user_id FROM users WHERE username = ?), NULL), ?)
+                    ''', (username, username, initials))
+                    conn.commit()
+                finally:
+                    conn.close()
+        except Exception as e:
+            logger_db.error(f"Ошибка сохранения пользователя {username}: {e}", exc_info=True)
+
+    def remove_user(self, username: str):
+        try:
+            with db_lock:
+                conn = self.get_connection()
+                try:
+                    cursor = conn.cursor()
+                    cursor.execute('DELETE FROM users WHERE username = ?', (username,))
+                    conn.commit()
+                finally:
+                    conn.close()
+        except Exception as e:
+            logger_db.error(f"Ошибка удаления пользователя {username}: {e}", exc_info=True)
+
+    def get_team(self) -> list:
+        try:
+            with db_lock:
+                conn = self.get_connection()
+                try:
+                    cursor = conn.cursor()
+                    cursor.execute('SELECT username, user_id, initials FROM users')
+                    rows = cursor.fetchall()
+                    return [{"username": r[0], "user_id": r[1], "initials": r[2]} for r in rows]
+                finally:
+                    conn.close()
+        except Exception as e:
+            logger_db.error("Ошибка получения команды", exc_info=True)
+            return []
+
+    def get_team_initials(self) -> list:
+        try:
+            with db_lock:
+                conn = self.get_connection()
+                try:
+                    cursor = conn.cursor()
+                    cursor.execute('SELECT initials FROM users')
+                    return [row[0] for row in cursor.fetchall()]
+                finally:
+                    conn.close()
+        except Exception as e:
+            logger_db.error("Ошибка получения инициалов команды", exc_info=True)
+            return []
     
     def get_user_ids(self) -> list:
         """
@@ -322,7 +383,8 @@ class Database:
                             'deadline': row[3], 'assignee': row[4], 'creator': row[5],
                             'status': row[6], 'created_at': row[7], 'completed_at': row[8],
                             'result_text': row[9], 'result_photo': row[10],
-                            'completed_assignees': row[11] if len(row) > 11 else ''
+                            'completed_assignees': row[11] if len(row) > 11 else '',
+                            'in_progress_assignees': row[12] if len(row) > 12 else ''
                         })
                     return tasks
                 finally:
@@ -346,7 +408,8 @@ class Database:
                             'deadline': row[3], 'assignee': row[4], 'creator': row[5],
                             'status': row[6], 'created_at': row[7], 'completed_at': row[8],
                             'result_text': row[9], 'result_photo': row[10],
-                            'completed_assignees': row[11] if len(row) > 11 else ''
+                            'completed_assignees': row[11] if len(row) > 11 else '',
+                            'in_progress_assignees': row[12] if len(row) > 12 else ''
                         }
                     return None
                 finally:

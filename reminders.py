@@ -102,7 +102,6 @@ async def send_custom_task_reminders(app: Application):
         assignee_names = {
             "AG": "Lysenko Alexander",
             "KA": "Ruslan Cherenkov",
-            "SA": "Test",
             "all": "Все"
         }
         

@@ -107,7 +107,26 @@ async def receive_description(update: Update, context: ContextTypes.DEFAULT_TYPE
             "Выберите исполнителя задачи:"
         )
         
-        keyboard = get_assignee_menu()
+        if 'db' in context.bot_data:
+            db_instance = context.bot_data['db']
+        else:
+            from database import Database
+            db_instance = Database()
+        team = db_instance.get_team()
+        assignee_buttons = []
+        row = []
+        for member in team:
+            initials = member.get('initials')
+            name = member.get('username')
+            row.append(InlineKeyboardButton(f"👤 {name}", callback_data=f"assignee_{initials}"))
+            if len(row) == 2:
+                assignee_buttons.append(row)
+                row = []
+        if row:
+            assignee_buttons.append(row)
+        assignee_buttons.append([InlineKeyboardButton("👥 Все", callback_data="assignee_all")])
+        assignee_buttons.append([InlineKeyboardButton("🔙 Отмена", callback_data="menu_main")])
+        keyboard = InlineKeyboardMarkup(assignee_buttons)
         
         await update.message.reply_text(text, reply_markup=keyboard, parse_mode='Markdown')
         return ASSIGNEE
@@ -128,10 +147,30 @@ async def skip_description(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             "Выберите исполнителя задачи:"
         )
         
+        if 'db' in context.bot_data:
+            db_instance = context.bot_data['db']
+        else:
+            from database import Database
+            db_instance = Database()
+        team = db_instance.get_team()
+        assignee_buttons = []
+        row = []
+        for member in team:
+            initials = member.get('initials')
+            name = member.get('username')
+            row.append(InlineKeyboardButton(f"👤 {name}", callback_data=f"assignee_{initials}"))
+            if len(row) == 2:
+                assignee_buttons.append(row)
+                row = []
+        if row:
+            assignee_buttons.append(row)
+        assignee_buttons.append([InlineKeyboardButton("👥 Все", callback_data="assignee_all")])
+        assignee_buttons.append([InlineKeyboardButton("🔙 Отмена", callback_data="menu_main")])
+        keyboard = InlineKeyboardMarkup(assignee_buttons)
         if update.callback_query:
-            await update.callback_query.edit_message_text(text, reply_markup=get_assignee_menu(), parse_mode='Markdown')
+            await update.callback_query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
         elif update.message:
-            await update.message.reply_text(text, reply_markup=get_assignee_menu(), parse_mode='Markdown')
+            await update.message.reply_text(text, reply_markup=keyboard, parse_mode='Markdown')
         
         return ASSIGNEE
     except Exception as e:
@@ -222,7 +261,13 @@ async def receive_assignee(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         
         assignee = parts[1]
         
-        if assignee not in ["AG", "KA", "SA", "all"]:
+        if 'db' in context.bot_data:
+            db_instance = context.bot_data['db']
+        else:
+            from database import Database
+            db_instance = Database()
+        valid_initials = db_instance.get_team_initials()
+        if assignee not in valid_initials + ["all"]:
             await update.callback_query.answer("❌ Неверный выбор исполнителя", show_alert=True)
             return ASSIGNEE
         
@@ -315,12 +360,9 @@ async def finish_create_task(update: Update, context: ContextTypes.DEFAULT_TYPE)
         task_id = db_instance.save_custom_task(title, description, deadline, assignee, creator)
         
         if task_id:
-            assignee_names = {
-                "AG": "Lysenko Alexander",
-                "KA": "Ruslan Cherenkov",
-                "SA": "Test",
-                "all": "Все"
-            }
+            team_initials = db_instance.get_team_initials()
+            assignee_names = {code: code for code in team_initials}
+            assignee_names["all"] = "Все"
             
             text = (
                 f"✅ **ЗАДАЧА СОЗДАНА!**\n\n"
@@ -359,23 +401,23 @@ async def finish_create_task(update: Update, context: ContextTypes.DEFAULT_TYPE)
                         f"📄 Описание: {description if description else 'Нет описания'}\n"
                         f"👤 Исполнитель: {assignee_names.get(assignee, assignee)}"
                     )
+                    if assignee == "all":
+                        symbols = []
+                        for code in team_initials:
+                            symbols.append(f"{code}: ⚪")
+                        group_text = group_text + "\n" + "Статусы: " + " / ".join(symbols)
                     
                     # Создаем кнопки: только "Взять в работу" (кнопка "Готово" появится после взятия в работу)
                     work_buttons = []
                     if assignee == "all":
-                        # Если исполнитель "Все", показываем кнопки "Взять в работу" для всех
-                        # Используем правильные коды: AG, KA, SA
-                        work_buttons = [
-                            [InlineKeyboardButton("👤 Lysenko Alexander - Взять в работу", callback_data=f"work_take_{task_id}_AG")],
-                            [InlineKeyboardButton("👤 Ruslan Cherenkov - Взять в работу", callback_data=f"work_take_{task_id}_KA")],
-                            [InlineKeyboardButton("👤 Test - Взять в работу", callback_data=f"work_take_{task_id}_SA")]
-                        ]
+                        row = []
+                        for code in team_initials:
+                            row.append(InlineKeyboardButton(f"👤 {code} - Взять", callback_data=f"work_take_{task_id}_{code}"))
+                        if row:
+                            work_buttons.append(row)
                     else:
-                        # Если конкретный исполнитель, показываем только кнопку "Взять в работу"
                         assignee_full = assignee_names.get(assignee, assignee)
-                        work_buttons = [
-                            [InlineKeyboardButton(f"👤 {assignee_full} - Взять в работу", callback_data=f"work_take_{task_id}_{assignee}")]
-                        ]
+                        work_buttons = [[InlineKeyboardButton(f"👤 {assignee_full} - Взять в работу", callback_data=f"work_take_{task_id}_{assignee}")]]
                     
                     work_keyboard = InlineKeyboardMarkup(work_buttons)
                     
@@ -647,7 +689,26 @@ async def receive_edit_deadline(update: Update, context: ContextTypes.DEFAULT_TY
             f"Выберите нового исполнителя задачи:"
         )
         
-        await update.message.reply_text(text, reply_markup=get_assignee_menu(), parse_mode='Markdown')
+        if 'db' in context.bot_data:
+            db_instance = context.bot_data['db']
+        else:
+            from database import Database
+            db_instance = Database()
+        team = db_instance.get_team()
+        assignee_buttons = []
+        row = []
+        for member in team:
+            initials = member.get('initials')
+            name = member.get('username')
+            row.append(InlineKeyboardButton(f"👤 {name}", callback_data=f"assignee_{initials}"))
+            if len(row) == 2:
+                assignee_buttons.append(row)
+                row = []
+        if row:
+            assignee_buttons.append(row)
+        assignee_buttons.append([InlineKeyboardButton("👥 Все", callback_data="assignee_all")])
+        assignee_buttons.append([InlineKeyboardButton("🔙 Отмена", callback_data="menu_main")])
+        await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(assignee_buttons), parse_mode='Markdown')
         return EDIT_ASSIGNEE
     except Exception as e:
         logger.error(f"Ошибка в receive_edit_deadline: {e}", exc_info=True)
@@ -666,7 +727,26 @@ async def skip_edit_deadline(update: Update, context: ContextTypes.DEFAULT_TYPE)
             f"Выберите нового исполнителя задачи:"
         )
         
-        await query.edit_message_text(text, reply_markup=get_assignee_menu(), parse_mode='Markdown')
+        if 'db' in context.bot_data:
+            db_instance = context.bot_data['db']
+        else:
+            from database import Database
+            db_instance = Database()
+        team = db_instance.get_team()
+        assignee_buttons = []
+        row = []
+        for member in team:
+            initials = member.get('initials')
+            name = member.get('username')
+            row.append(InlineKeyboardButton(f"👤 {name}", callback_data=f"assignee_{initials}"))
+            if len(row) == 2:
+                assignee_buttons.append(row)
+                row = []
+        if row:
+            assignee_buttons.append(row)
+        assignee_buttons.append([InlineKeyboardButton("👥 Все", callback_data="assignee_all")])
+        assignee_buttons.append([InlineKeyboardButton("🔙 Отмена", callback_data="menu_main")])
+        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(assignee_buttons), parse_mode='Markdown')
         return EDIT_ASSIGNEE
     except Exception as e:
         logger.error(f"Ошибка в skip_edit_deadline: {e}", exc_info=True)
@@ -687,7 +767,13 @@ async def receive_edit_assignee(update: Update, context: ContextTypes.DEFAULT_TY
         
         assignee = parts[1]
         
-        if assignee not in ["AG", "KA", "SA", "all"]:
+        if 'db' in context.bot_data:
+            db = context.bot_data['db']
+        else:
+            from database import Database
+            db = Database()
+        valid_initials = db.get_team_initials()
+        if assignee not in valid_initials + ["all"]:
             await update.callback_query.answer("❌ Неверный выбор исполнителя", show_alert=True)
             return EDIT_ASSIGNEE
         
@@ -715,7 +801,6 @@ async def receive_edit_assignee(update: Update, context: ContextTypes.DEFAULT_TY
         assignee_names = {
             "AG": "Lysenko Alexander",
             "KA": "Ruslan Cherenkov",
-            "SA": "Test",
             "all": "Все"
         }
         
@@ -1360,7 +1445,7 @@ async def start_work_task(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         try:
             task_id = int(parts[2])
             assignee = parts[3]
-            if assignee not in ["AG", "KA", "SA"]:
+            if assignee not in ["AG", "KA"]:
                 await query.answer("❌ Неверный исполнитель", show_alert=True)
                 return -1
         except (ValueError, IndexError):
@@ -1818,5 +1903,67 @@ async def cancel_work_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return -1
     except Exception as e:
         logger.error(f"Ошибка в cancel_work_task: {e}", exc_info=True)
+        return -1
+
+from telegram.ext import ContextTypes
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from datetime import datetime
+import logging
+logger = logging.getLogger(__name__)
+
+TEAM_USERNAME, TEAM_INITIALS, TEAM_CUSTOM_INITIALS = range(3)
+
+async def start_team_add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    try:
+        query = update.callback_query
+        await query.answer()
+        text = "Введите @username сотрудника"
+        await query.edit_message_text(text, parse_mode='Markdown')
+        return TEAM_USERNAME
+    except Exception:
+        return -1
+
+async def receive_team_username(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    try:
+        username = update.message.text.strip().lstrip('@')
+        context.user_data['team_add_username'] = username
+        buttons = [
+            [InlineKeyboardButton("AG", callback_data="team_init_AG"), InlineKeyboardButton("KA", callback_data="team_init_KA")],
+            [InlineKeyboardButton("Другое", callback_data="team_init_other"), InlineKeyboardButton("Отмена", callback_data="team_init_cancel")]
+        ]
+        await update.message.reply_text("Выберите инициалы", reply_markup=InlineKeyboardMarkup(buttons))
+        return TEAM_INITIALS
+    except Exception:
+        return -1
+
+async def receive_team_initials(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    try:
+        query = update.callback_query
+        data = query.data
+        if data == 'team_init_cancel':
+            await query.answer("Отменено")
+            await query.edit_message_text("Отмена")
+            return -1
+        if data == 'team_init_other':
+            await query.edit_message_text("Введите инициалы")
+            return TEAM_CUSTOM_INITIALS
+        initials = data.split('_')[-1]
+        username = context.user_data.get('team_add_username')
+        db = context.bot_data.get('db')
+        db.save_user(username, initials)
+        await query.edit_message_text(f"✅ Добавлен: @{username} ({initials})")
+        return -1
+    except Exception:
+        return -1
+
+async def receive_team_custom_initials(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    try:
+        initials = update.message.text.strip().upper()
+        username = context.user_data.get('team_add_username')
+        db = context.bot_data.get('db')
+        db.save_user(username, initials)
+        await update.message.reply_text(f"✅ Добавлен: @{username} ({initials})")
+        return -1
+    except Exception:
         return -1
 
