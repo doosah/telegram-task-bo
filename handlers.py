@@ -107,7 +107,7 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
             if not team:
                 text = "👥 **КОМАНДА**\n\nСписок пуст"
             else:
-                lines = [f"@{m.get('username')} ({m.get('initials')})" for m in team]
+                lines = [f"@{m.get('username')} ({m.get('name', m.get('initials', ''))})" for m in team]
                 text = "👥 **КОМАНДА**\n\n" + "\n".join(lines)
             from menu import get_team_menu
             await query.edit_message_text(text, reply_markup=get_team_menu(), parse_mode='Markdown')
@@ -156,6 +156,44 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
                 from menu import get_team_remove_confirm_menu
                 await query.edit_message_text(text, reply_markup=get_team_remove_confirm_menu(username), parse_mode='Markdown')
                 await query.answer()
+        
+        elif data == "team_earned":
+            # Кнопка "Сотрудник заработал"
+            team = db.get_team()
+            if not team:
+                text = "👥 **СОТРУДНИК ЗАРАБОТАЛ**\n\nСписок команды пуст."
+                from menu import get_team_menu
+                await query.edit_message_text(text, reply_markup=get_team_menu(), parse_mode='Markdown')
+            else:
+                text = "💰 **СОТРУДНИК ЗАРАБОТАЛ**\n\nВыберите сотрудника:"
+                keyboard = []
+                for member in team:
+                    username = member.get('username', '')
+                    name = member.get('name', member.get('initials', ''))
+                    keyboard.append([
+                        InlineKeyboardButton(
+                            f"💰 @{username} ({name})",
+                            callback_data=f"team_earned_{username}"
+                        )
+                    ])
+                keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="menu_team")])
+                await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+                await query.answer()
+        
+        elif data.startswith("team_earned_"):
+            # Обработка выбора сотрудника для отметки "заработал"
+            username = data.replace("team_earned_", "")
+            team = db.get_team()
+            member = next((m for m in team if m.get('username') == username), None)
+            if member:
+                name = member.get('name', member.get('initials', ''))
+                text = f"✅ **ОТМЕЧЕНО**\n\n@{username} ({name}) заработал!"
+                from menu import get_team_menu
+                await query.edit_message_text(text, reply_markup=get_team_menu(), parse_mode='Markdown')
+                await query.answer("✅ Отмечено")
+                logger.info(f"Сотрудник @{username} отмечен как заработавший")
+            else:
+                await query.answer("❌ Сотрудник не найден", show_alert=True)
         
         elif data == "menu_help":
             text = (
@@ -772,14 +810,22 @@ async def handle_work_task_take(query, data: str, context: ContextTypes.DEFAULT_
         task_assignee = task.get('assignee', 'all')
         in_progress_str = task.get('in_progress_assignees', '') or ''
         completed_str = task.get('completed_assignees', '') or ''
-        in_progress_list = in_progress_str.split(',') if in_progress_str else []
-        completed_list = completed_str.split(',') if completed_str else []
+        in_progress_list = [x.strip() for x in in_progress_str.split(',') if x.strip()] if in_progress_str else []
+        completed_list = [x.strip() for x in completed_str.split(',') if x.strip()] if completed_str else []
+        
+        # Проверяем, не взял ли уже задачу в работу
+        if assignee in in_progress_list:
+            await query.answer("⚠️ Вы уже взяли эту задачу в работу", show_alert=True)
+            return
+        
+        # Проверяем, не выполнил ли уже задачу
         if assignee in completed_list:
-            pass
-        else:
-            if assignee not in in_progress_list:
-                in_progress_list.append(assignee)
-            db.update_custom_task(task_id, status='in_progress', in_progress_assignees=','.join(in_progress_list))
+            await query.answer("⚠️ Вы уже выполнили эту задачу", show_alert=True)
+            return
+        
+        # Добавляем в список взятых в работу
+        in_progress_list.append(assignee)
+        db.update_custom_task(task_id, status='in_progress', in_progress_assignees=','.join(in_progress_list))
         
         # Обновляем сообщение в группе - добавляем ⏰ к тексту задачи
         if query.message and query.message.chat.type in ['group', 'supergroup']:
@@ -802,23 +848,27 @@ async def handle_work_task_take(query, data: str, context: ContextTypes.DEFAULT_
             except Exception as e:
                 logger.error(f"Ошибка обновления текста сообщения: {e}", exc_info=True)
         
-        # Отправляем уведомление в общий чат о взятии в работу
+        # Отправляем уведомление в чат о взятии в работу (в то же сообщение, где задача)
         try:
-            chat_id = context.bot_data.get('CHAT_ID')
-            if not chat_id:
-                import os
-                chat_id = os.getenv('CHAT_ID', '').strip()
-            
-            if chat_id:
-                chat_id = int(chat_id) if isinstance(chat_id, str) else chat_id
-                take_text = f"{assignee} взял задачу в работу"
+            if query.message and query.message.chat.type in ['group', 'supergroup']:
+                chat_id = query.message.chat.id
+                # Получаем имя пользователя из БД
+                team = db.get_team()
+                user_name = assignee
+                for member in team:
+                    if member.get('name', member.get('initials', '')) == assignee:
+                        user_name = f"@{member.get('username', assignee)}"
+                        break
+                
+                take_text = f"✅ {user_name} взял задачу #{task_id} в работу"
                 await context.bot.send_message(
                     chat_id=chat_id,
-                    text=take_text
+                    text=take_text,
+                    reply_to_message_id=query.message.message_id
                 )
-                logger.info(f"Уведомление о взятии задачи #{task_id} в работу отправлено в общий чат {chat_id}")
+                logger.info(f"Уведомление о взятии задачи #{task_id} в работу отправлено в чат {chat_id}")
         except Exception as e:
-            logger.error(f"Ошибка отправки уведомления в общий чат: {e}", exc_info=True)
+            logger.error(f"Ошибка отправки уведомления в чат: {e}", exc_info=True)
         
         # Обновляем кнопку в сообщении группы (если это сообщение из группы)
         if query.message and query.message.chat.type in ['group', 'supergroup']:
@@ -883,7 +933,8 @@ async def handle_work_task_done(query, data: str, context: ContextTypes.DEFAULT_
         try:
             task_id = int(parts[2])
             assignee = parts[3]
-            if assignee not in ["AG", "KA"]:
+            team_names = db.get_team_initials()  # Получаем список имен команды
+            if assignee not in team_names:
                 await query.answer("❌ Неверный исполнитель", show_alert=True)
                 return
         except (ValueError, IndexError):
@@ -907,13 +958,25 @@ async def handle_work_task_done(query, data: str, context: ContextTypes.DEFAULT_
         # Получаем текущую задачу для проверки assignee
         task_assignee = task.get('assignee', 'all')
         
+        # Получаем списки исполнителей
+        in_progress_str = task.get('in_progress_assignees', '') or ''
+        completed_str = task.get('completed_assignees', '') or ''
+        in_progress_list = [x.strip() for x in in_progress_str.split(',') if x.strip()] if in_progress_str else []
+        completed_list = [x.strip() for x in completed_str.split(',') if x.strip()] if completed_str else []
+        
+        # Проверяем, не выполнил ли уже задачу
+        if assignee in completed_list:
+            await query.answer("⚠️ Вы уже выполнили эту задачу", show_alert=True)
+            return
+        
+        # Проверяем, взял ли задачу в работу
+        if assignee not in in_progress_list:
+            await query.answer("⚠️ Сначала нужно взять задачу в работу", show_alert=True)
+            return
+        
         # Если задача назначена конкретному исполнителю - сразу завершаем
         # Если задача назначена "всем" - проверяем, все ли завершили
         if task_assignee == 'all':
-            # Получаем список завершенных исполнителей из БД
-            completed_assignees = task.get('completed_assignees', '') or ''
-            completed_list = completed_assignees.split(',') if completed_assignees else []
-            
             # Добавляем текущего исполнителя в список завершенных
             if assignee not in completed_list:
                 completed_list.append(assignee)
@@ -925,9 +988,9 @@ async def handle_work_task_done(query, data: str, context: ContextTypes.DEFAULT_
                 completed_assignees=completed_str
             )
             
-            # Проверяем, все ли исполнители завершили (AG, KA)
-            all_assignees = ['AG', 'KA']
-            all_completed = all(assignee_code in completed_list for assignee_code in all_assignees)
+            # Проверяем, все ли исполнители завершили
+            team_names = db.get_team_initials()
+            all_completed = all(assignee_code in completed_list for assignee_code in team_names)
             
             if all_completed:
                 # Все завершили - задача полностью завершена
@@ -944,30 +1007,26 @@ async def handle_work_task_done(query, data: str, context: ContextTypes.DEFAULT_
                 completed_at=datetime.now().isoformat()
             )
         
-        # Отправляем уведомление в общий чат
+        # Отправляем уведомление в чат о выполнении задачи
         try:
-            chat_id = context.bot_data.get('CHAT_ID')
-            if not chat_id:
-                import os
-                chat_id = os.getenv('CHAT_ID', '').strip()
-            
-            if chat_id:
-                chat_id = int(chat_id) if isinstance(chat_id, str) else chat_id
-                assignee_names = {
-                    "AG": "Lysenko Alexander",
-                    "KA": "Ruslan Cherenkov"
-                }
-                assignee_name = assignee_names.get(assignee, assignee)
-                
+            if query.message and query.message.chat.type in ['group', 'supergroup']:
+                chat_id = query.message.chat.id
+                # Получаем имя пользователя из БД
+                team = db.get_team()
+                user_name = assignee
+                for member in team:
+                    if member.get('name', member.get('initials', '')) == assignee:
+                        user_name = f"@{member.get('username', assignee)}"
+                        break
                 # Проверяем, полностью ли завершена задача
                 task_assignee = task.get('assignee', 'all')
                 if task_assignee == 'all':
                     # Получаем обновленную задачу
                     updated_task = db.get_custom_task(task_id)
                     completed_assignees = updated_task.get('completed_assignees', '') or ''
-                    completed_list = completed_assignees.split(',') if completed_assignees else []
-                    all_assignees = ['AG', 'KA']
-                    all_completed = all(assignee_code in completed_list for assignee_code in all_assignees)
+                    completed_list = [x.strip() for x in completed_assignees.split(',') if x.strip()] if completed_assignees else []
+                    team_names = db.get_team_initials()
+                    all_completed = all(assignee_code in completed_list for assignee_code in team_names)
                     
                     if all_completed:
                         completion_text = (
@@ -979,13 +1038,12 @@ async def handle_work_task_done(query, data: str, context: ContextTypes.DEFAULT_
                         )
                     else:
                         # Еще не все завершили
-                        remaining = [a for a in all_assignees if a not in completed_list]
-                        remaining_names = [assignee_names.get(a, a) for a in remaining]
+                        remaining = [a for a in team_names if a not in completed_list]
                         completion_text = (
                             f"✅ **ЧАСТИЧНО ЗАВЕРШЕНО**\n\n"
                             f"📝 Задача: {task['title']}\n"
-                            f"👤 {assignee_name} завершил свою часть\n"
-                            f"⏳ Ожидаются: {', '.join(remaining_names)}\n"
+                            f"👤 {user_name} завершил свою часть\n"
+                            f"⏳ Ожидаются: {', '.join(remaining)}\n"
                             f"🆔 ID задачи: #{task_id}\n"
                             f"🕐 Время: {datetime.now(MOSCOW_TZ).strftime('%H:%M')}"
                         )
@@ -993,16 +1051,17 @@ async def handle_work_task_done(query, data: str, context: ContextTypes.DEFAULT_
                     completion_text = (
                         f"✅ **ЗАДАЧА ЗАВЕРШЕНА**\n\n"
                         f"📝 Задача: {task['title']}\n"
-                        f"👤 Исполнитель: {assignee_name}\n"
+                        f"👤 Исполнитель: {user_name}\n"
                         f"🆔 ID задачи: #{task_id}\n"
                         f"🕐 Время: {datetime.now(MOSCOW_TZ).strftime('%H:%M')}"
                     )
                 await context.bot.send_message(
                     chat_id=chat_id,
                     text=completion_text,
+                    reply_to_message_id=query.message.message_id,
                     parse_mode='Markdown'
                 )
-                logger.info(f"Уведомление о завершении задачи #{task_id} отправлено в общий чат {chat_id}")
+                logger.info(f"Уведомление о завершении задачи #{task_id} отправлено в чат {chat_id}")
         except Exception as e:
             logger.error(f"Ошибка отправки уведомления в общий чат: {e}", exc_info=True)
 

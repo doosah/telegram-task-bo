@@ -51,9 +51,28 @@ class Database:
                     CREATE TABLE IF NOT EXISTS users (
                         username TEXT PRIMARY KEY,
                         user_id INTEGER,
-                        initials TEXT NOT NULL
+                        name TEXT NOT NULL
                     )
                 ''')
+                
+                # Миграция: переименовываем initials в name, если колонка name не существует
+                try:
+                    cursor.execute('ALTER TABLE users ADD COLUMN name TEXT')
+                    # Копируем данные из initials в name
+                    cursor.execute('UPDATE users SET name = initials WHERE name IS NULL OR name = ""')
+                    # Удаляем старую колонку initials (SQLite не поддерживает DROP COLUMN, поэтому просто игнорируем)
+                except sqlite3.OperationalError:
+                    pass
+                
+                # Миграция: переименовываем существующих пользователей
+                try:
+                    # Lysenko Alexander -> Vesenko, Aleksandr
+                    cursor.execute("UPDATE users SET name = 'Vesenko, Aleksandr' WHERE name = 'AG' OR name = 'Lysenko Alexander' OR username LIKE '%vesenko%' OR username LIKE '%lysenko%'")
+                    # Cherykov Ruslan -> Cherenkov, Ruslan
+                    cursor.execute("UPDATE users SET name = 'Cherenkov, Ruslan' WHERE name = 'KA' OR name = 'Cherykov Ruslan' OR username LIKE '%cherykov%' OR username LIKE '%cherenkov%'")
+                    conn.commit()
+                except Exception as e:
+                    logger_db.warning(f"Ошибка миграции имен пользователей: {e}")
                 
                 # Таблица для новых задач (созданных через меню)
                 cursor.execute('''
@@ -212,16 +231,16 @@ class Database:
             # Логируем ошибку, но не падаем
             logger_db.error(f"Ошибка сохранения ID пользователя {username}: {e}", exc_info=True)
 
-    def save_user(self, username: str, initials: str):
+    def save_user(self, username: str, name: str):
         try:
             with db_lock:
                 conn = self.get_connection()
                 try:
                     cursor = conn.cursor()
                     cursor.execute('''
-                        INSERT OR REPLACE INTO users (username, user_id, initials)
+                        INSERT OR REPLACE INTO users (username, user_id, name)
                         VALUES (?, COALESCE((SELECT user_id FROM users WHERE username = ?), NULL), ?)
-                    ''', (username, username, initials))
+                    ''', (username, username, name))
                     conn.commit()
                 finally:
                     conn.close()
@@ -247,9 +266,13 @@ class Database:
                 conn = self.get_connection()
                 try:
                     cursor = conn.cursor()
-                    cursor.execute('SELECT username, user_id, initials FROM users')
+                    # Пытаемся получить name, если нет - используем initials (для обратной совместимости)
+                    try:
+                        cursor.execute('SELECT username, user_id, name FROM users')
+                    except sqlite3.OperationalError:
+                        cursor.execute('SELECT username, user_id, initials FROM users')
                     rows = cursor.fetchall()
-                    return [{"username": r[0], "user_id": r[1], "initials": r[2]} for r in rows]
+                    return [{"username": r[0], "user_id": r[1], "name": r[2] if len(r) > 2 else ""} for r in rows]
                 finally:
                     conn.close()
         except Exception as e:
@@ -257,18 +280,27 @@ class Database:
             return []
 
     def get_team_initials(self) -> list:
+        """Возвращает список имен команды (для обратной совместимости используется старое название)"""
         try:
             with db_lock:
                 conn = self.get_connection()
                 try:
                     cursor = conn.cursor()
-                    cursor.execute('SELECT initials FROM users')
-                    return [row[0] for row in cursor.fetchall()]
+                    # Пытаемся получить name, если нет - используем initials (для обратной совместимости)
+                    try:
+                        cursor.execute('SELECT name FROM users')
+                    except sqlite3.OperationalError:
+                        cursor.execute('SELECT initials FROM users')
+                    return [row[0] for row in cursor.fetchall() if row[0]]
                 finally:
                     conn.close()
         except Exception as e:
-            logger_db.error("Ошибка получения инициалов команды", exc_info=True)
+            logger_db.error("Ошибка получения имен команды", exc_info=True)
             return []
+    
+    def get_team_names(self) -> list:
+        """Возвращает список имен команды"""
+        return self.get_team_initials()
     
     def get_user_ids(self) -> list:
         """

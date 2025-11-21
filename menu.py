@@ -209,6 +209,9 @@ def get_team_menu() -> InlineKeyboardMarkup:
             InlineKeyboardButton("🗑️ Удалить", callback_data="team_remove")
         ],
         [
+            InlineKeyboardButton("💰 Сотрудник заработал", callback_data="team_earned")
+        ],
+        [
             InlineKeyboardButton("🔙 Назад в меню", callback_data="menu_main")
         ]
     ]
@@ -220,10 +223,10 @@ def get_team_remove_menu(team: list) -> InlineKeyboardMarkup:
     keyboard = []
     for member in team:
         username = member.get('username', '')
-        initials = member.get('initials', '')
+        name = member.get('name', member.get('initials', ''))
         keyboard.append([
             InlineKeyboardButton(
-                f"🗑️ @{username} ({initials})",
+                f"🗑️ @{username} ({name})",
                 callback_data=f"team_remove_{username}"
             )
         ])

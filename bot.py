@@ -1286,8 +1286,8 @@ def main():
         
         # ConversationHandler для добавления сотрудника
         from conversations import (
-            TEAM_USERNAME, TEAM_INITIALS, TEAM_CUSTOM_INITIALS,
-            start_team_add, receive_team_username, receive_team_initials, receive_team_custom_initials, cancel_team_add
+            TEAM_USERNAME, TEAM_NAME,
+            start_team_add, receive_team_username, receive_team_name, cancel_team_add
         )
         
         add_employee_conv = ConversationHandler(
@@ -1298,11 +1298,8 @@ def main():
                 TEAM_USERNAME: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, receive_team_username)
                 ],
-                TEAM_INITIALS: [
-                    CallbackQueryHandler(receive_team_initials, pattern="^team_init_")
-                ],
-                TEAM_CUSTOM_INITIALS: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, receive_team_custom_initials)
+                TEAM_NAME: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, receive_team_name)
                 ]
             },
             fallbacks=[
