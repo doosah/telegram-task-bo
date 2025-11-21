@@ -98,14 +98,9 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
             await query.edit_message_text(text, reply_markup=get_testing_menu(), parse_mode='Markdown')
         
         elif data == "menu_team":
-            # Показываем список команды сразу
-            team = db.get_team()
-            if not team:
-                text = "👥 **КОМАНДА**\n\nСписок пуст. Добавьте сотрудников через кнопку '➕ Добавить'."
-            else:
-                lines = [f"@{m.get('username', '')} ({m.get('name', m.get('initials', ''))})" for m in team]
-                text = "👥 **КОМАНДА**\n\n" + "\n".join(lines)
+            # Показываем меню команды
             from menu import get_team_menu
+            text = "👥 **УПРАВЛЕНИЕ КОМАНДОЙ**"
             await query.edit_message_text(text, reply_markup=get_team_menu(), parse_mode='Markdown')
         
         elif data == "team_list_btn":

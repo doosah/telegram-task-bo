@@ -237,11 +237,35 @@ class Database:
                 conn = self.get_connection()
                 try:
                     cursor = conn.cursor()
-                    cursor.execute('''
-                        INSERT OR REPLACE INTO users (username, user_id, name)
-                        VALUES (?, COALESCE((SELECT user_id FROM users WHERE username = ?), NULL), ?)
-                    ''', (username, username, name))
+                    # Проверяем, какие колонки есть в таблице
+                    cursor.execute("PRAGMA table_info(users)")
+                    columns = [row[1] for row in cursor.fetchall()]
+                    logger_db.info(f"Колонки в таблице users: {columns}")
+                    
+                    # Если есть колонка name - используем её, иначе initials
+                    if 'name' in columns:
+                        cursor.execute('''
+                            INSERT OR REPLACE INTO users (username, user_id, name)
+                            VALUES (?, COALESCE((SELECT user_id FROM users WHERE username = ?), NULL), ?)
+                        ''', (username, username, name))
+                    elif 'initials' in columns:
+                        cursor.execute('''
+                            INSERT OR REPLACE INTO users (username, user_id, initials)
+                            VALUES (?, COALESCE((SELECT user_id FROM users WHERE username = ?), NULL), ?)
+                        ''', (username, username, name))
+                    else:
+                        # Если нет ни name, ни initials - добавляем колонку name
+                        try:
+                            cursor.execute('ALTER TABLE users ADD COLUMN name TEXT')
+                        except sqlite3.OperationalError:
+                            pass
+                        cursor.execute('''
+                            INSERT OR REPLACE INTO users (username, user_id, name)
+                            VALUES (?, COALESCE((SELECT user_id FROM users WHERE username = ?), NULL), ?)
+                        ''', (username, username, name))
+                    
                     conn.commit()
+                    logger_db.info(f"Пользователь {username} ({name}) успешно сохранен в БД")
                 finally:
                     conn.close()
         except Exception as e:
@@ -284,13 +308,14 @@ class Database:
                         username = r[0] if len(r) > 0 else ""
                         user_id = r[1] if len(r) > 1 else None
                         name_or_initials = r[2] if len(r) > 2 else ""
-                        result.append({
-                            "username": username,
-                            "user_id": user_id,
-                            "name": name_or_initials,
-                            "initials": name_or_initials  # Для обратной совместимости
-                        })
-                    logger_db.info(f"Получено {len(result)} сотрудников из БД")
+                        if username:  # Только если username не пустой
+                            result.append({
+                                "username": username,
+                                "user_id": user_id,
+                                "name": name_or_initials,
+                                "initials": name_or_initials  # Для обратной совместимости
+                            })
+                    logger_db.info(f"Получено {len(result)} сотрудников из БД: {[r['username'] for r in result]}")
                     return result
                 finally:
                     conn.close()
