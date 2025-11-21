@@ -99,6 +99,75 @@ class Database:
                 ''')
                 
                 # Добавляем поля, если их еще нет
+                # Таблица для еженедельных задач
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS weekly_tasks (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        day INTEGER NOT NULL,
+                        task_text TEXT NOT NULL,
+                        task_order INTEGER DEFAULT 0,
+                        created_at TEXT NOT NULL
+                    )
+                ''')
+                
+                # Инициализация еженедельных задач, если таблица пуста
+                cursor.execute('SELECT COUNT(*) FROM weekly_tasks')
+                if cursor.fetchone()[0] == 0:
+                    # Загружаем начальные задачи из tasks.py
+                    initial_tasks = {
+                        0: [  # ПОНЕДЕЛЬНИК
+                            "Проверить календарь в почте спланировать день",
+                            "Выгрузить инвенту, провести анализ",
+                            "Просмотреть 40 графану на наличие фруода",
+                            "Просмотреть графану 73 на наличие с2с",
+                            "Провести обход совместно с менеджером сц",
+                            "Проверить пазл на наличие заявок близких к просроку",
+                            "На основе анализа составить план отработки",
+                            "Заполнить отчеты, написать письма"
+                        ],
+                        1: [  # ВТОРНИК
+                            "Проверить календарь в почте спланировать день",
+                            "Подготовиться к встрече",
+                            "Отработка фрода",
+                            "Просмотр 39 графаны",
+                            "Просмотреть графану 73 на наличие с2с",
+                            "Проверить наличие с2с в недостачах",
+                            "Заполнить отчеты, написать письма"
+                        ],
+                        2: [  # СРЕДА
+                            "Проверить календарь в почте спланировать день",
+                            "Выставление ШС озон джоб",
+                            "Провести обход совместно с менеджером сц",
+                            "Просмотреть графану 73 на наличие с2с",
+                            "Проверка проведения инвентаризации операциями",
+                            "Проверка зоны обезлички",
+                            "Заполнить отчеты, написать письма"
+                        ],
+                        3: [  # ЧЕТВЕРГ
+                            "Проверить календарь в почте спланировать день",
+                            "Отработка фрода",
+                            "Просмотр 39 графаны",
+                            "Просмотреть графану 73 на наличие с2с",
+                            "Предварительные итоги разбора недостач с операциями",
+                            "Заполнить отчеты, написать письма"
+                        ],
+                        4: [  # ПЯТНИЦА
+                            "Проверить календарь в почте спланировать день",
+                            "Проверить пазл на наличие заявок близких к просроку",
+                            "Просмотреть графану 73 на наличие с2с",
+                            "Выставление ШС озон джоб",
+                            "Заполнить отчеты, написать письма"
+                        ]
+                    }
+                    from datetime import datetime
+                    now = datetime.now().isoformat()
+                    for day, tasks in initial_tasks.items():
+                        for order, task_text in enumerate(tasks):
+                            cursor.execute('''
+                                INSERT INTO weekly_tasks (day, task_text, task_order, created_at)
+                                VALUES (?, ?, ?, ?)
+                            ''', (day, task_text, order, now))
+                
                 try:
                     cursor.execute('ALTER TABLE custom_tasks ADD COLUMN completed_assignees TEXT')
                 except sqlite3.OperationalError:
@@ -581,6 +650,108 @@ class Database:
                     conn.close()
         except Exception as e:
             logger_db.error(f"Ошибка удаления задачи {task_id}: {e}", exc_info=True)
+    
+    def get_weekly_tasks(self, day: int = None) -> list:
+        """Получить еженедельные задачи для дня (или все, если day=None)"""
+        try:
+            with db_lock:
+                conn = self.get_connection()
+                try:
+                    cursor = conn.cursor()
+                    if day is not None:
+                        cursor.execute('''
+                            SELECT id, day, task_text, task_order
+                            FROM weekly_tasks
+                            WHERE day = ?
+                            ORDER BY task_order
+                        ''', (day,))
+                    else:
+                        cursor.execute('''
+                            SELECT id, day, task_text, task_order
+                            FROM weekly_tasks
+                            ORDER BY day, task_order
+                        ''')
+                    results = cursor.fetchall()
+                    return [{'id': r[0], 'day': r[1], 'task_text': r[2], 'task_order': r[3]} for r in results]
+                finally:
+                    conn.close()
+        except Exception as e:
+            logger_db.error(f"Ошибка получения еженедельных задач: {e}", exc_info=True)
+            return []
+    
+    def add_weekly_task(self, day: int, task_text: str) -> int:
+        """Добавить еженедельную задачу"""
+        try:
+            with db_lock:
+                conn = self.get_connection()
+                try:
+                    cursor = conn.cursor()
+                    # Получаем максимальный порядок для дня
+                    cursor.execute('SELECT MAX(task_order) FROM weekly_tasks WHERE day = ?', (day,))
+                    max_order = cursor.fetchone()[0]
+                    task_order = (max_order + 1) if max_order is not None else 0
+                    
+                    from datetime import datetime
+                    created_at = datetime.now().isoformat()
+                    
+                    cursor.execute('''
+                        INSERT INTO weekly_tasks (day, task_text, task_order, created_at)
+                        VALUES (?, ?, ?, ?)
+                    ''', (day, task_text, task_order, created_at))
+                    conn.commit()
+                    task_id = cursor.lastrowid
+                    logger_db.info(f"Добавлена еженедельная задача для дня {day}: {task_text[:50]}")
+                    return task_id
+                finally:
+                    conn.close()
+        except Exception as e:
+            logger_db.error(f"Ошибка добавления еженедельной задачи: {e}", exc_info=True)
+            return -1
+    
+    def update_weekly_task(self, task_id: int, task_text: str = None, day: int = None, task_order: int = None):
+        """Обновить еженедельную задачу"""
+        try:
+            with db_lock:
+                conn = self.get_connection()
+                try:
+                    cursor = conn.cursor()
+                    updates = []
+                    values = []
+                    if task_text is not None:
+                        updates.append('task_text = ?')
+                        values.append(task_text)
+                    if day is not None:
+                        updates.append('day = ?')
+                        values.append(day)
+                    if task_order is not None:
+                        updates.append('task_order = ?')
+                        values.append(task_order)
+                    
+                    if updates:
+                        values.append(task_id)
+                        query = f"UPDATE weekly_tasks SET {', '.join(updates)} WHERE id = ?"
+                        cursor.execute(query, tuple(values))
+                        conn.commit()
+                        logger_db.info(f"Обновлена еженедельная задача #{task_id}")
+                finally:
+                    conn.close()
+        except Exception as e:
+            logger_db.error(f"Ошибка обновления еженедельной задачи {task_id}: {e}", exc_info=True)
+    
+    def delete_weekly_task(self, task_id: int):
+        """Удалить еженедельную задачу"""
+        try:
+            with db_lock:
+                conn = self.get_connection()
+                try:
+                    cursor = conn.cursor()
+                    cursor.execute('DELETE FROM weekly_tasks WHERE id = ?', (task_id,))
+                    conn.commit()
+                    logger_db.info(f"Удалена еженедельная задача #{task_id}")
+                finally:
+                    conn.close()
+        except Exception as e:
+            logger_db.error(f"Ошибка удаления еженедельной задачи {task_id}: {e}", exc_info=True)
     
     def save_presence(self, username: str, user_id: int, status: str, time: str = None, delay_minutes: int = None, reason: str = None):
         """Сохраняет отметку присутствия"""

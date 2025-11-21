@@ -26,6 +26,9 @@ def get_main_menu() -> InlineKeyboardMarkup:
             InlineKeyboardButton("👥 Команда", callback_data="menu_team")
         ],
         [
+            InlineKeyboardButton("📅 Еженедельные задачи", callback_data="menu_weekly_tasks")
+        ],
+        [
             InlineKeyboardButton("🧪 Тестирование", callback_data="menu_testing"),
             InlineKeyboardButton("❓ Помощь", callback_data="menu_help")
         ]
@@ -241,5 +244,65 @@ def get_team_remove_confirm_menu(username: str) -> InlineKeyboardMarkup:
             InlineKeyboardButton("❌ Отмена", callback_data="team_remove_cancel")
         ]
     ]
+    return InlineKeyboardMarkup(keyboard)
+
+
+def get_weekly_tasks_menu() -> InlineKeyboardMarkup:
+    """Меню управления еженедельными задачами"""
+    keyboard = [
+        [
+            InlineKeyboardButton("📋 Просмотр задач", callback_data="weekly_view")
+        ],
+        [
+            InlineKeyboardButton("➕ Добавить задачу", callback_data="weekly_add")
+        ],
+        [
+            InlineKeyboardButton("✏️ Редактировать", callback_data="weekly_edit")
+        ],
+        [
+            InlineKeyboardButton("🗑️ Удалить задачу", callback_data="weekly_delete")
+        ],
+        [
+            InlineKeyboardButton("🔙 Назад в меню", callback_data="menu_main")
+        ]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+
+def get_weekly_day_menu() -> InlineKeyboardMarkup:
+    """Меню выбора дня недели"""
+    keyboard = [
+        [
+            InlineKeyboardButton("Понедельник", callback_data="weekly_day_0"),
+            InlineKeyboardButton("Вторник", callback_data="weekly_day_1")
+        ],
+        [
+            InlineKeyboardButton("Среда", callback_data="weekly_day_2"),
+            InlineKeyboardButton("Четверг", callback_data="weekly_day_3")
+        ],
+        [
+            InlineKeyboardButton("Пятница", callback_data="weekly_day_4")
+        ],
+        [
+            InlineKeyboardButton("🔙 Назад", callback_data="menu_weekly_tasks")
+        ]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+
+def get_weekly_tasks_list_menu(tasks: list, day: int, action_prefix: str = "weekly_task") -> InlineKeyboardMarkup:
+    """Меню со списком задач для выбора"""
+    keyboard = []
+    for i, task in enumerate(tasks):
+        task_text = task.get('task_text', '')[:40] + ('...' if len(task.get('task_text', '')) > 40 else '')
+        keyboard.append([
+            InlineKeyboardButton(
+                f"{i+1}. {task_text}",
+                callback_data=f"{action_prefix}_{task.get('id')}"
+            )
+        ])
+    keyboard.append([
+        InlineKeyboardButton("🔙 Назад", callback_data="menu_weekly_tasks")
+    ])
     return InlineKeyboardMarkup(keyboard)
 

@@ -625,10 +625,31 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.answer()
             return
         
-        # Обработка меню (кроме menu_create_task, menu_add_employee и team_add - их обрабатывает ConversationHandler)
-        # Если это menu_create_task, menu_add_employee или team_add, просто возвращаемся - ConversationHandler должен перехватить
-        if data == "menu_create_task" or data == "menu_add_employee" or data == "team_add":
+        # Обработка меню (кроме menu_create_task, menu_add_employee, team_add, weekly_add - их обрабатывает ConversationHandler)
+        # Если это menu_create_task, menu_add_employee, team_add или weekly_add, просто возвращаемся - ConversationHandler должен перехватить
+        if data == "menu_create_task" or data == "menu_add_employee" or data == "team_add" or data == "weekly_add":
             return  # Не обрабатываем здесь, пусть ConversationHandler перехватит
+        
+        # Обработка редактирования еженедельных задач через текст
+        if context.user_data.get('weekly_edit_state'):
+            task_id = context.user_data.get('weekly_edit_task_id')
+            if task_id and update.message:
+                task_text = update.message.text.strip()
+                if len(task_text) < 3:
+                    await update.message.reply_text("❌ Текст задачи должен быть не менее 3 символов. Попробуйте снова:")
+                    return
+                
+                db = context.bot_data.get('db')
+                if db:
+                    db.update_weekly_task(task_id, task_text=task_text)
+                    from menu import get_weekly_tasks_menu
+                    text = f"✅ **ЗАДАЧА ОБНОВЛЕНА**\n\n📝 Новый текст: {task_text}"
+                    await update.message.reply_text(text, reply_markup=get_weekly_tasks_menu(), parse_mode='Markdown')
+                    context.user_data.pop('weekly_edit_state', None)
+                    context.user_data.pop('weekly_edit_task_id', None)
+                else:
+                    await update.message.reply_text("❌ Ошибка: база данных не найдена")
+            return
         
         if data.startswith("menu_"):
             await handle_menu_callback(query, data, context, db)
@@ -1367,6 +1388,34 @@ def main():
         
         application.add_handler(complete_task_conv, group=2)
         logger.info("ConversationHandler для завершения задач зарегистрирован (группа 2)")
+        
+        # ConversationHandler для еженедельных задач
+        from conversations import (
+            WEEKLY_DAY, WEEKLY_TASK_TEXT,
+            start_weekly_add, receive_weekly_day, receive_weekly_task_text, cancel_weekly_task
+        )
+        
+        weekly_tasks_conv = ConversationHandler(
+            entry_points=[
+                CallbackQueryHandler(start_weekly_add, pattern="^weekly_add$")
+            ],
+            states={
+                WEEKLY_DAY: [
+                    CallbackQueryHandler(receive_weekly_day, pattern="^weekly_day_[0-4]$")
+                ],
+                WEEKLY_TASK_TEXT: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, receive_weekly_task_text)
+                ]
+            },
+            fallbacks=[
+                CallbackQueryHandler(cancel_weekly_task, pattern="^weekly_cancel$"),
+                CommandHandler("cancel", cancel_weekly_task)
+            ],
+            name="weekly_tasks_conversation"
+        )
+        
+        application.add_handler(weekly_tasks_conv, group=2)
+        logger.info("ConversationHandler для еженедельных задач зарегистрирован (группа 2)")
         
         # Убрали ConversationHandler для работы с задачей - теперь используем простые кнопки
         # Обработчики handle_work_task_take и handle_work_task_done зарегистрированы через button_callback

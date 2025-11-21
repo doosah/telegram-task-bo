@@ -17,6 +17,116 @@ logger = logging.getLogger(__name__)
 (WORK_RESULT, WORK_PHOTO) = range(11, 13)  # Состояния для работы с задачей
 # Состояния для добавления сотрудника
 (EMPLOYEE_USERNAME, EMPLOYEE_INITIALS, EMPLOYEE_INITIALS_INPUT) = range(13, 16)
+# Состояния для еженедельных задач
+(WEEKLY_DAY, WEEKLY_TASK_TEXT, WEEKLY_EDIT_TASK_ID, WEEKLY_EDIT_TEXT) = range(16, 20)
+
+
+# ========== ЕЖЕНЕДЕЛЬНЫЕ ЗАДАЧИ ==========
+
+async def start_weekly_add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Начало добавления еженедельной задачи - выбор дня"""
+    try:
+        from menu import get_weekly_day_menu
+        text = (
+            "➕ **ДОБАВЛЕНИЕ ЕЖЕНЕДЕЛЬНОЙ ЗАДАЧИ**\n\n"
+            "Шаг 1/2: Выберите день недели"
+        )
+        keyboard = get_weekly_day_menu()
+        
+        if update.callback_query:
+            await update.callback_query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
+        elif update.message:
+            await update.message.reply_text(text, reply_markup=keyboard, parse_mode='Markdown')
+        
+        return WEEKLY_DAY
+    except Exception as e:
+        logger.error(f"Ошибка в start_weekly_add: {e}", exc_info=True)
+        return -1
+
+
+async def receive_weekly_day(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Получение дня недели для добавления задачи"""
+    try:
+        if update.callback_query:
+            data = update.callback_query.data
+            if data.startswith("weekly_day_"):
+                day = int(data.split("_")[-1])
+                context.user_data['weekly_add_day'] = day
+                
+                day_names = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница"]
+                day_name = day_names[day] if 0 <= day < 5 else f"День {day}"
+                
+                text = (
+                    f"➕ **ДОБАВЛЕНИЕ ЗАДАЧИ: {day_name.upper()}**\n\n"
+                    "Шаг 2/2: Текст задачи\n\n"
+                    "Введите текст задачи:"
+                )
+                keyboard = InlineKeyboardMarkup([[
+                    InlineKeyboardButton("❌ Отмена", callback_data="weekly_cancel")
+                ]])
+                await update.callback_query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
+                return WEEKLY_TASK_TEXT
+        return -1
+    except Exception as e:
+        logger.error(f"Ошибка в receive_weekly_day: {e}", exc_info=True)
+        return -1
+
+
+async def receive_weekly_task_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Получение текста задачи"""
+    try:
+        if update.message:
+            task_text = update.message.text.strip()
+            if len(task_text) < 3:
+                await update.message.reply_text("❌ Текст задачи должен быть не менее 3 символов. Попробуйте снова:")
+                return WEEKLY_TASK_TEXT
+            
+            day = context.user_data.get('weekly_add_day')
+            if day is None:
+                await update.message.reply_text("❌ Ошибка: день недели не найден")
+                return -1
+            
+            db = context.bot_data.get('db')
+            if not db:
+                await update.message.reply_text("❌ Ошибка: база данных не найдена")
+                return -1
+            
+            task_id = db.add_weekly_task(day, task_text)
+            if task_id > 0:
+                day_names = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница"]
+                day_name = day_names[day] if 0 <= day < 5 else f"День {day}"
+                
+                from menu import get_weekly_tasks_menu
+                text = f"✅ **ЗАДАЧА ДОБАВЛЕНА**\n\n📅 День: {day_name}\n📝 Задача: {task_text}"
+                await update.message.reply_text(text, reply_markup=get_weekly_tasks_menu(), parse_mode='Markdown')
+                context.user_data.pop('weekly_add_day', None)
+                return -1
+            else:
+                await update.message.reply_text("❌ Ошибка при добавлении задачи")
+                return -1
+        return -1
+    except Exception as e:
+        logger.error(f"Ошибка в receive_weekly_task_text: {e}", exc_info=True)
+        await update.message.reply_text("❌ Произошла ошибка при добавлении задачи")
+        return -1
+
+
+async def cancel_weekly_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Отмена добавления еженедельной задачи"""
+    try:
+        context.user_data.pop('weekly_add_day', None)
+        from menu import get_weekly_tasks_menu
+        text = "❌ Добавление задачи отменено"
+        
+        if update.callback_query:
+            await update.callback_query.edit_message_text(text, reply_markup=get_weekly_tasks_menu(), parse_mode='Markdown')
+        elif update.message:
+            await update.message.reply_text(text, reply_markup=get_weekly_tasks_menu(), parse_mode='Markdown')
+        
+        return -1
+    except Exception as e:
+        logger.error(f"Ошибка в cancel_weekly_task: {e}", exc_info=True)
+        return -1
 
 
 async def start_create_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:

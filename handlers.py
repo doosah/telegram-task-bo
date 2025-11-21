@@ -199,7 +199,18 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
         elif data == "menu_help":
             text = (
                 "❓ **ПОМОЩЬ**\n\n"
-                "📝 **Создать задачу** - добавить новую задачу\n\n"
+                "**Основные функции:**\n"
+                "📝 **Создать задачу** - создать новую задачу с описанием, сроком и исполнителем\n\n"
+                "👥 **Команда** - управление сотрудниками:\n"
+                "  • Просмотр списка команды\n"
+                "  • Добавление новых сотрудников\n"
+                "  • Удаление сотрудников\n\n"
+                "📅 **Еженедельные задачи** - управление задачами по дням недели:\n"
+                "  • Просмотр задач на день\n"
+                "  • Добавление новых задач\n"
+                "  • Редактирование задач\n"
+                "  • Удаление задач\n\n"
+                "**Дополнительно:**\n"
                 "🧪 **Тестирование** - тестовые функции бота"
             )
             keyboard = InlineKeyboardMarkup([[
@@ -214,6 +225,132 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
                 "Выберите действие:"
             )
             await query.edit_message_text(text, reply_markup=get_team_menu(), parse_mode='Markdown')
+        
+        elif data == "menu_weekly_tasks":
+            from menu import get_weekly_tasks_menu
+            text = (
+                "📅 **ЕЖЕНЕДЕЛЬНЫЕ ЗАДАЧИ**\n\n"
+                "Управление задачами по дням недели:\n"
+                "• Просмотр задач на день\n"
+                "• Добавление новых задач\n"
+                "• Редактирование задач\n"
+                "• Удаление задач"
+            )
+            await query.edit_message_text(text, reply_markup=get_weekly_tasks_menu(), parse_mode='Markdown')
+        
+        elif data == "weekly_view":
+            from menu import get_weekly_day_menu
+            text = "📋 **ПРОСМОТР ЗАДАЧ**\n\nВыберите день недели:"
+            await query.edit_message_text(text, reply_markup=get_weekly_day_menu(), parse_mode='Markdown')
+        
+        elif data.startswith("weekly_day_"):
+            day = int(data.split("_")[-1])
+            day_names = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница"]
+            day_name = day_names[day] if 0 <= day < 5 else f"День {day}"
+            
+            tasks = db.get_weekly_tasks(day)
+            if not tasks:
+                text = f"📋 **{day_name.upper()}**\n\nЗадач пока нет."
+            else:
+                lines = [f"{i+1}. {task['task_text']}" for i, task in enumerate(tasks)]
+                text = f"📋 **{day_name.upper()}**\n\n" + "\n".join(lines)
+            
+            from menu import get_weekly_day_menu
+            await query.edit_message_text(text, reply_markup=get_weekly_day_menu(), parse_mode='Markdown')
+        
+        elif data == "weekly_add":
+            # ConversationHandler обработает это
+            return
+        
+        elif data == "weekly_edit":
+            from menu import get_weekly_day_menu
+            text = "✏️ **РЕДАКТИРОВАНИЕ ЗАДАЧ**\n\nВыберите день недели:"
+            await query.edit_message_text(text, reply_markup=get_weekly_day_menu(), parse_mode='Markdown')
+        
+        elif data == "weekly_delete":
+            # Создаем специальное меню для выбора дня при удалении
+            keyboard = [
+                [
+                    InlineKeyboardButton("Понедельник", callback_data="weekly_delete_day_0"),
+                    InlineKeyboardButton("Вторник", callback_data="weekly_delete_day_1")
+                ],
+                [
+                    InlineKeyboardButton("Среда", callback_data="weekly_delete_day_2"),
+                    InlineKeyboardButton("Четверг", callback_data="weekly_delete_day_3")
+                ],
+                [
+                    InlineKeyboardButton("Пятница", callback_data="weekly_delete_day_4")
+                ],
+                [
+                    InlineKeyboardButton("🔙 Назад", callback_data="menu_weekly_tasks")
+                ]
+            ]
+            text = "🗑️ **УДАЛЕНИЕ ЗАДАЧИ**\n\nВыберите день недели:"
+            await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+        
+        elif data.startswith("weekly_edit_day_"):
+            day = int(data.split("_")[-1])
+            day_names = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница"]
+            day_name = day_names[day] if 0 <= day < 5 else f"День {day}"
+            
+            tasks = db.get_weekly_tasks(day)
+            if not tasks:
+                text = f"✏️ **РЕДАКТИРОВАНИЕ: {day_name.upper()}**\n\nЗадач пока нет."
+                from menu import get_weekly_day_menu
+                await query.edit_message_text(text, reply_markup=get_weekly_day_menu(), parse_mode='Markdown')
+            else:
+                from menu import get_weekly_tasks_list_menu
+                text = f"✏️ **РЕДАКТИРОВАНИЕ: {day_name.upper()}**\n\nВыберите задачу для редактирования:"
+                await query.edit_message_text(text, reply_markup=get_weekly_tasks_list_menu(tasks, day, "weekly_edit_task"), parse_mode='Markdown')
+        
+        elif data.startswith("weekly_edit_task_"):
+            task_id = int(data.split("_")[-1])
+            all_tasks = db.get_weekly_tasks()
+            task_info = next((t for t in all_tasks if t['id'] == task_id), None)
+            if task_info:
+                context.user_data['weekly_edit_task_id'] = task_id
+                text = (
+                    f"✏️ **РЕДАКТИРОВАНИЕ ЗАДАЧИ**\n\n"
+                    f"Текущий текст: {task_info['task_text']}\n\n"
+                    "Введите новый текст задачи:"
+                )
+                keyboard = InlineKeyboardMarkup([[
+                    InlineKeyboardButton("❌ Отмена", callback_data="weekly_edit_cancel")
+                ]])
+                await query.edit_message_text(text, reply_markup=keyboard, parse_mode='Markdown')
+                # Сохраняем состояние для обработки текста
+                context.user_data['weekly_edit_state'] = True
+            else:
+                await query.answer("❌ Задача не найдена", show_alert=True)
+        
+        elif data.startswith("weekly_delete_day_"):
+            day = int(data.split("_")[-1])
+            day_names = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница"]
+            day_name = day_names[day] if 0 <= day < 5 else f"День {day}"
+            
+            tasks = db.get_weekly_tasks(day)
+            if not tasks:
+                text = f"🗑️ **УДАЛЕНИЕ: {day_name.upper()}**\n\nЗадач пока нет."
+                from menu import get_weekly_day_menu
+                await query.edit_message_text(text, reply_markup=get_weekly_day_menu(), parse_mode='Markdown')
+            else:
+                from menu import get_weekly_tasks_list_menu
+                text = f"🗑️ **УДАЛЕНИЕ: {day_name.upper()}**\n\nВыберите задачу для удаления:"
+                await query.edit_message_text(text, reply_markup=get_weekly_tasks_list_menu(tasks, day, "weekly_delete_task"), parse_mode='Markdown')
+        
+        elif data.startswith("weekly_delete_task_"):
+            task_id = int(data.split("_")[-1])
+            task = db.get_weekly_tasks()
+            task_info = next((t for t in task if t['id'] == task_id), None)
+            if task_info:
+                db.delete_weekly_task(task_id)
+                await query.answer("✅ Задача удалена", show_alert=True)
+                # Возвращаемся к меню
+                from menu import get_weekly_tasks_menu
+                text = "📅 **ЕЖЕНЕДЕЛЬНЫЕ ЗАДАЧИ**\n\nЗадача успешно удалена."
+                await query.edit_message_text(text, reply_markup=get_weekly_tasks_menu(), parse_mode='Markdown')
+            else:
+                await query.answer("❌ Задача не найдена", show_alert=True)
         
         elif data == "team_add":
             # ConversationHandler обработает это через entry_points
