@@ -208,7 +208,39 @@ def get_team_menu() -> InlineKeyboardMarkup:
             InlineKeyboardButton("📋 Список", callback_data="team_list_btn")
         ],
         [
+            InlineKeyboardButton("🗑️ Удалить сотрудника", callback_data="team_remove")
+        ],
+        [
             InlineKeyboardButton("🔙 Назад в меню", callback_data="menu_main")
+        ]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+
+def get_team_remove_menu(team: list) -> InlineKeyboardMarkup:
+    """Меню для выбора сотрудника для удаления"""
+    keyboard = []
+    for member in team:
+        username = member.get('username', '')
+        initials = member.get('initials', '')
+        keyboard.append([
+            InlineKeyboardButton(
+                f"🗑️ @{username} ({initials})",
+                callback_data=f"team_remove_{username}"
+            )
+        ])
+    keyboard.append([
+        InlineKeyboardButton("🔙 Назад к команде", callback_data="menu_team")
+    ])
+    return InlineKeyboardMarkup(keyboard)
+
+
+def get_team_remove_confirm_menu(username: str) -> InlineKeyboardMarkup:
+    """Меню подтверждения удаления сотрудника"""
+    keyboard = [
+        [
+            InlineKeyboardButton("✅ Да, удалить", callback_data=f"team_remove_confirm_{username}"),
+            InlineKeyboardButton("❌ Отмена", callback_data="team_remove_cancel")
         ]
     ]
     return InlineKeyboardMarkup(keyboard)

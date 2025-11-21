@@ -105,12 +105,57 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
         elif data == "team_list_btn":
             team = db.get_team()
             if not team:
-                text = "👥 Список пуст"
+                text = "👥 **КОМАНДА**\n\nСписок пуст"
             else:
                 lines = [f"@{m.get('username')} ({m.get('initials')})" for m in team]
                 text = "👥 **КОМАНДА**\n\n" + "\n".join(lines)
             from menu import get_team_menu
             await query.edit_message_text(text, reply_markup=get_team_menu(), parse_mode='Markdown')
+        
+        elif data == "team_remove":
+            # Показываем список сотрудников для удаления
+            team = db.get_team()
+            if not team:
+                text = "👥 **УДАЛЕНИЕ СОТРУДНИКА**\n\nСписок пуст. Нечего удалять."
+                from menu import get_team_menu
+                await query.edit_message_text(text, reply_markup=get_team_menu(), parse_mode='Markdown')
+            else:
+                text = "🗑️ **УДАЛЕНИЕ СОТРУДНИКА**\n\nВыберите сотрудника для удаления:"
+                from menu import get_team_remove_menu
+                await query.edit_message_text(text, reply_markup=get_team_remove_menu(team), parse_mode='Markdown')
+        
+        elif data.startswith("team_remove_"):
+            # Обработка выбора сотрудника для удаления или подтверждения
+            if data.startswith("team_remove_confirm_"):
+                # Подтверждение удаления
+                username = data.replace("team_remove_confirm_", "")
+                try:
+                    db.remove_user(username)
+                    text = f"✅ **СОТРУДНИК УДАЛЕН**\n\n@{username} успешно удален из команды."
+                    from menu import get_team_menu
+                    await query.edit_message_text(text, reply_markup=get_team_menu(), parse_mode='Markdown')
+                    await query.answer("✅ Сотрудник удален")
+                    logger.info(f"Сотрудник @{username} удален из команды")
+                except Exception as e:
+                    logger.error(f"Ошибка удаления сотрудника @{username}: {e}", exc_info=True)
+                    await query.answer("❌ Ошибка при удалении", show_alert=True)
+            elif data == "team_remove_cancel":
+                # Отмена удаления
+                from menu import get_team_menu
+                text = "❌ **ОТМЕНА**\n\nУдаление отменено."
+                await query.edit_message_text(text, reply_markup=get_team_menu(), parse_mode='Markdown')
+                await query.answer("Отменено")
+            else:
+                # Выбор сотрудника для удаления - показываем подтверждение
+                username = data.replace("team_remove_", "")
+                text = (
+                    f"⚠️ **ПОДТВЕРЖДЕНИЕ УДАЛЕНИЯ**\n\n"
+                    f"Вы уверены, что хотите удалить @{username} из команды?\n\n"
+                    f"Это действие нельзя отменить."
+                )
+                from menu import get_team_remove_confirm_menu
+                await query.edit_message_text(text, reply_markup=get_team_remove_confirm_menu(username), parse_mode='Markdown')
+                await query.answer()
         
         elif data == "menu_help":
             text = (
