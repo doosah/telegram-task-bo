@@ -5,6 +5,7 @@
 
 import os
 import logging
+from logging.handlers import RotatingFileHandler
 import time as time_module
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -37,11 +38,16 @@ from handlers import (
 )
 
 # Настройка логирования (записи о работе бота)
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+_fmt = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+_sh = logging.StreamHandler()
+_sh.setFormatter(logging.Formatter(_fmt))
+_fh = RotatingFileHandler('bot.log', maxBytes=1_000_000, backupCount=5, encoding='utf-8')
+_fh.setFormatter(logging.Formatter(_fmt))
+logger.handlers = []
+logger.addHandler(_sh)
+logger.addHandler(_fh)
 
 # Получаем данные из переменных окружения (секретные данные)
 # ВАЖНО: В production НЕ используйте дефолтные значения!
@@ -64,6 +70,20 @@ tasks_manager = Tasks()
 
 # Часовой пояс (Москва)
 MOSCOW_TZ = pytz.timezone('Europe/Moscow')
+
+MORNING_TIME = os.getenv('MORNING_TIME', '08:00')
+SUMMARY_TIME = os.getenv('SUMMARY_TIME', '16:50')
+
+def _parse_time_str(t: str):
+    try:
+        parts = t.split(':')
+        h = int(parts[0])
+        m = int(parts[1]) if len(parts) > 1 else 0
+        if not (0 <= h <= 23 and 0 <= m <= 59):
+            return 8, 0
+        return h, m
+    except Exception:
+        return 8, 0
 
 # Список известных спамеров (черный список)
 SPAM_BLACKLIST = [
@@ -391,6 +411,63 @@ async def force_morning_command(update: Update, context: ContextTypes.DEFAULT_TY
         logger.error(f"Ошибка в force_morning_command: {e}", exc_info=True)
         await update.message.reply_text(error_msg)
 
+
+async def team_add_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        if await spam_filter(update, context):
+            return
+        user = update.effective_user
+        if not user or user.username != ADMIN_USERNAME:
+            await update.message.reply_text("❌ Недостаточно прав")
+            return
+        if len(context.args) < 2:
+            await update.message.reply_text("❌ Использование: /team_add @username INITIALS")
+            return
+        username = context.args[0].lstrip('@')
+        initials = context.args[1].upper()
+        db.save_user(username, initials)
+        await update.message.reply_text(f"✅ Добавлен: @{username} ({initials})")
+    except Exception as e:
+        logger.error(f"Ошибка team_add_command: {e}", exc_info=True)
+        await update.message.reply_text("❌ Ошибка")
+
+
+async def team_remove_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        if await spam_filter(update, context):
+            return
+        user = update.effective_user
+        if not user or user.username != ADMIN_USERNAME:
+            await update.message.reply_text("❌ Недостаточно прав")
+            return
+        if len(context.args) < 1:
+            await update.message.reply_text("❌ Использование: /team_remove @username")
+            return
+        username = context.args[0].lstrip('@')
+        db.remove_user(username)
+        await update.message.reply_text(f"✅ Удален: @{username}")
+    except Exception as e:
+        logger.error(f"Ошибка team_remove_command: {e}", exc_info=True)
+        await update.message.reply_text("❌ Ошибка")
+
+
+async def team_list_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        if await spam_filter(update, context):
+            return
+        team = db.get_team()
+        if not team:
+            await update.message.reply_text("👥 Список пуст")
+            return
+        lines = []
+        for m in team:
+            u = m.get('username')
+            i = m.get('initials')
+            lines.append(f"@{u} ({i})")
+        await update.message.reply_text("👥 Команда:\n" + "\n".join(lines))
+    except Exception as e:
+        logger.error(f"Ошибка team_list_command: {e}", exc_info=True)
+        await update.message.reply_text("❌ Ошибка")
 
 def create_task_keyboard(task_text: str, task_id: str) -> InlineKeyboardMarkup:
     """Создает одну кнопку для задачи"""
@@ -1030,18 +1107,16 @@ async def send_presence_reminder(app: Application):
 def setup_scheduler(app: Application):
     """Настройка расписания отправки сообщений"""
     scheduler = AsyncIOScheduler(timezone=MOSCOW_TZ)
-    
-    # 08:00 - задачи на день
+    h1, m1 = _parse_time_str(MORNING_TIME)
+    h2, m2 = _parse_time_str(SUMMARY_TIME)
     scheduler.add_job(
         send_morning_tasks,
-        trigger=CronTrigger(hour=8, minute=0, day_of_week='mon-fri', timezone=MOSCOW_TZ),
+        trigger=CronTrigger(hour=h1, minute=m1, day_of_week='mon-fri', timezone=MOSCOW_TZ),
         args=[app]
     )
-    
-    # 16:50 - итоги дня
     scheduler.add_job(
         send_evening_summary,
-        trigger=CronTrigger(hour=16, minute=50, day_of_week='mon-fri', timezone=MOSCOW_TZ),
+        trigger=CronTrigger(hour=h2, minute=m2, day_of_week='mon-fri', timezone=MOSCOW_TZ),
         args=[app]
     )
     
@@ -1085,7 +1160,6 @@ def main():
             else:
                 logger.info(f"Спамер {spam_username} еще не найден в БД, будет заблокирован при первой попытке")
         
-        # Сохраняем функции для тестирования
         application.bot_data['send_morning_tasks'] = send_morning_tasks
         logger.info("Функции тестирования сохранены в bot_data")
         
@@ -1104,6 +1178,11 @@ def main():
         
         application.add_handler(CommandHandler("force_morning", force_morning_command))
         logger.info("Обработчик /force_morning зарегистрирован")
+
+        application.add_handler(CommandHandler("team_add", team_add_command))
+        application.add_handler(CommandHandler("team_remove", team_remove_command))
+        application.add_handler(CommandHandler("team_list", team_list_command))
+        logger.info("Команды управления командой зарегистрированы")
         
         # Регистрируем глобальный фильтр спама для всех текстовых сообщений
         async def global_spam_filter(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1250,6 +1329,13 @@ def main():
                     # Не падаем, просто логируем
                 else:
                     logger.error(f"Необработанная ошибка: {error}", exc_info=error)
+                    admin_id = context.bot_data.get('admin_id')
+                    if admin_id:
+                        try:
+                            msg = f"❌ Ошибка: {type(error).__name__}: {str(error)[:200]}"
+                            await context.bot.send_message(chat_id=admin_id, text=msg)
+                        except Exception:
+                            pass
         
         application.add_error_handler(error_handler)
         logger.info("Обработчик ошибок зарегистрирован")

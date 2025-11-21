@@ -16,6 +16,17 @@ logger = logging.getLogger(__name__)
 # Состояния для ConversationHandler
 (TITLE, DESCRIPTION, DEADLINE, ASSIGNEE, REASON) = range(5)
 
+def build_status_line(team_initials: list, in_progress: list, completed: list) -> str:
+    symbols = []
+    for code in team_initials:
+        if code in completed:
+            symbols.append(f"{code}: ✅")
+        elif code in in_progress:
+            symbols.append(f"{code}: ⏳")
+        else:
+            symbols.append(f"{code}: ⚪")
+    return "Статусы: " + " / ".join(symbols)
+
 
 async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_TYPE, db):
     """Обработка нажатий на кнопки меню"""
@@ -659,7 +670,8 @@ async def handle_work_task_take(query, data: str, context: ContextTypes.DEFAULT_
         try:
             task_id = int(parts[2])
             assignee = parts[3]
-            if assignee not in ["AG", "KA"]:
+            team_initials = db.get_team_initials()
+            if assignee not in team_initials:
                 await query.answer("❌ Неверный исполнитель", show_alert=True)
                 return
         except (ValueError, IndexError):
@@ -679,40 +691,36 @@ async def handle_work_task_take(query, data: str, context: ContextTypes.DEFAULT_
         
         # Обновляем статус задачи на "in_progress" и добавляем индикатор ⏰ в сообщение
         from datetime import datetime
-        db.update_custom_task(task_id, status='in_progress')
+        task_assignee = task.get('assignee', 'all')
+        in_progress_str = task.get('in_progress_assignees', '') or ''
+        completed_str = task.get('completed_assignees', '') or ''
+        in_progress_list = in_progress_str.split(',') if in_progress_str else []
+        completed_list = completed_str.split(',') if completed_str else []
+        if assignee in completed_list:
+            pass
+        else:
+            if assignee not in in_progress_list:
+                in_progress_list.append(assignee)
+            db.update_custom_task(task_id, status='in_progress', in_progress_assignees=','.join(in_progress_list))
         
         # Обновляем сообщение в группе - добавляем ⏰ к тексту задачи
         if query.message and query.message.chat.type in ['group', 'supergroup']:
             try:
-                assignee_names = {
-                    "AG": "Lysenko Alexander",
-                    "KA": "Ruslan Cherenkov"
-                }
-                assignee_name = assignee_names.get(assignee, assignee)
-                
                 # Получаем текущий текст сообщения
                 current_text = query.message.text or query.message.caption or ""
-                
-                # Добавляем индикатор ⏰ к названию задачи, если его еще нет
-                if "⏰" not in current_text and task['title'] in current_text:
-                    # Заменяем название задачи на название с индикатором
-                    new_text = current_text.replace(
-                        f"📝 **{task['title']}**",
-                        f"📝 **{task['title']}** ⏰"
-                    )
-                    # Если не нашлось, пробуем другой формат
-                    if new_text == current_text:
-                        new_text = current_text.replace(
-                            task['title'],
-                            f"{task['title']} ⏰"
-                        )
-                    
-                    if new_text != current_text:
-                        await query.message.edit_text(
-                            text=new_text,
-                            reply_markup=query.message.reply_markup,
-                            parse_mode='Markdown'
-                        )
+                team_initials = db.get_team_initials() if task_assignee == 'all' else [assignee]
+                status_line = build_status_line(team_initials, in_progress_list, completed_list)
+                new_text = current_text
+                if 'Статусы:' in current_text:
+                    import re
+                    new_text = re.sub(r"Статусы:.*", status_line, current_text)
+                else:
+                    new_text = current_text + "\n" + status_line
+                await query.message.edit_text(
+                    text=new_text,
+                    reply_markup=query.message.reply_markup,
+                    parse_mode='Markdown'
+                )
             except Exception as e:
                 logger.error(f"Ошибка обновления текста сообщения: {e}", exc_info=True)
         
@@ -725,13 +733,7 @@ async def handle_work_task_take(query, data: str, context: ContextTypes.DEFAULT_
             
             if chat_id:
                 chat_id = int(chat_id) if isinstance(chat_id, str) else chat_id
-                assignee_names = {
-                    "AG": "Lysenko Alexander",
-                    "KA": "Ruslan Cherenkov"
-                }
-                assignee_name = assignee_names.get(assignee, assignee)
-                
-                take_text = f"{assignee_name} взял задачу в работу"
+                take_text = f"{assignee} взял задачу в работу"
                 await context.bot.send_message(
                     chat_id=chat_id,
                     text=take_text
@@ -751,13 +753,8 @@ async def handle_work_task_take(query, data: str, context: ContextTypes.DEFAULT_
                     for button in row:
                         # Если это кнопка "Взять в работу" для этого исполнителя - заменяем на "Готово"
                         if button.callback_data == data:
-                            assignee_names = {
-                                "AG": "Lysenko Alexander",
-                                "KA": "Ruslan Cherenkov"
-                            }
-                            assignee_name = assignee_names.get(assignee, assignee)
                             new_row.append(InlineKeyboardButton(
-                                f"✅ {assignee_name} - Готово",
+                                f"✅ {assignee} - Готово",
                                 callback_data=f"work_done_{task_id}_{assignee}"
                             ))
                         else:
@@ -772,16 +769,12 @@ async def handle_work_task_take(query, data: str, context: ContextTypes.DEFAULT_
         
         # Отправляем описание задачи пользователю в личные сообщения
         try:
-            assignee_names = {
-                "AG": "Lysenko Alexander",
-                "KA": "Ruslan Cherenkov"
-            }
             confirm_text = (
                 f"📋 **ЗАДАЧА #{task_id} ВЗЯТА В РАБОТУ**\n\n"
                 f"📝 **{task['title']}**\n\n"
                 f"📄 **Описание:**\n{task.get('description', 'Нет описания')}\n\n"
                 f"⏰ Срок: {task.get('deadline', 'Не указан')}\n"
-                f"👤 Исполнитель: {assignee_names.get(assignee, assignee)}"
+                f"👤 Исполнитель: {assignee}"
             )
             await context.bot.send_message(
                 chat_id=user_id,
@@ -934,7 +927,7 @@ async def handle_work_task_done(query, data: str, context: ContextTypes.DEFAULT_
                 logger.info(f"Уведомление о завершении задачи #{task_id} отправлено в общий чат {chat_id}")
         except Exception as e:
             logger.error(f"Ошибка отправки уведомления в общий чат: {e}", exc_info=True)
-        
+
         # Уведомление администратору отправляется только при полном завершении
         # (уже отправлено выше в общий чат)
         
@@ -967,6 +960,29 @@ async def handle_work_task_done(query, data: str, context: ContextTypes.DEFAULT_
                     await query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup(new_keyboard))
                 except Exception as e:
                     logger.error(f"Ошибка обновления клавиатуры: {e}", exc_info=True)
+
+        if query.message and query.message.chat.type in ['group', 'supergroup']:
+            try:
+                current_text = query.message.text or query.message.caption or ""
+                updated_task = db.get_custom_task(task_id)
+                in_progress_assignees = updated_task.get('in_progress_assignees', '') or ''
+                completed_assignees = updated_task.get('completed_assignees', '') or ''
+                in_progress_list = in_progress_assignees.split(',') if in_progress_assignees else []
+                completed_list = completed_assignees.split(',') if completed_assignees else []
+                team_initials = db.get_team_initials() if task_assignee == 'all' else [assignee]
+                status_line = build_status_line(team_initials, in_progress_list, completed_list)
+                if 'Статусы:' in current_text:
+                    import re
+                    new_text = re.sub(r"Статусы:.*", status_line, current_text)
+                else:
+                    new_text = current_text + "\n" + status_line
+                await query.message.edit_text(
+                    text=new_text,
+                    reply_markup=query.message.reply_markup,
+                    parse_mode='Markdown'
+                )
+            except Exception as e:
+                logger.error(f"Ошибка обновления статусов в сообщении: {e}", exc_info=True)
         
         # Отправляем подтверждение пользователю в личные сообщения
         try:
