@@ -61,7 +61,7 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
                 "Выберите действие:"
             )
             try:
-                await safe_edit_message(query, text, reply_markup)
+                await safe_edit_message(query, text, get_main_menu())
             except Exception as edit_error:
                 # Если не удалось отредактировать (например, сообщение с фото), отправляем новое
                 logger.warning(f"Не удалось отредактировать сообщение, отправляем новое: {edit_error}")
@@ -138,11 +138,11 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
             if not team:
                 text = "👥 **УДАЛЕНИЕ СОТРУДНИКА**\n\nСписок пуст. Нечего удалять."
                 from menu import get_team_menu
-                await safe_edit_message(query, text, reply_markup)
+                await safe_edit_message(query, text, get_team_menu())
             else:
                 text = "🗑️ **УДАЛЕНИЕ СОТРУДНИКА**\n\nВыберите сотрудника для удаления:"
                 from menu import get_team_remove_menu
-                await safe_edit_message(query, text, reply_markup)
+                await safe_edit_message(query, text, get_team_remove_menu(team))
         
         elif data.startswith("team_remove_"):
             # Обработка выбора сотрудника для удаления или подтверждения
@@ -153,7 +153,7 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
                     db.remove_user(username)
                     text = f"✅ **СОТРУДНИК УДАЛЕН**\n\n@{username} успешно удален из команды."
                     from menu import get_team_menu
-                    await safe_edit_message(query, text, reply_markup)
+                    await safe_edit_message(query, text, get_team_menu())
                     await query.answer("✅ Сотрудник удален")
                     logger.info(f"Сотрудник @{username} удален из команды")
                 except Exception as e:
@@ -163,7 +163,7 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
                 # Отмена удаления
                 from menu import get_team_menu
                 text = "❌ **ОТМЕНА**\n\nУдаление отменено."
-                await safe_edit_message(query, text, reply_markup)
+                await safe_edit_message(query, text, get_team_menu())
                 await query.answer("Отменено")
             else:
                 # Выбор сотрудника для удаления - показываем подтверждение
@@ -174,7 +174,7 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
                     f"Это действие нельзя отменить."
                 )
                 from menu import get_team_remove_confirm_menu
-                await safe_edit_message(query, text, reply_markup)
+                await safe_edit_message(query, text, get_team_remove_confirm_menu(username))
                 await query.answer()
         
         elif data == "team_earned":
@@ -183,7 +183,7 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
             if not team:
                 text = "👥 **СОТРУДНИК ЗАРАБОТАЛ**\n\nСписок команды пуст."
                 from menu import get_team_menu
-                await safe_edit_message(query, text, reply_markup)
+                await safe_edit_message(query, text, get_team_menu())
             else:
                 text = "💰 **СОТРУДНИК ЗАРАБОТАЛ**\n\nВыберите сотрудника:"
                 keyboard = []
@@ -197,7 +197,7 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
                         )
                     ])
                 keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="menu_team")])
-                await safe_edit_message(query, text, reply_markup)
+                await safe_edit_message(query, text, InlineKeyboardMarkup(keyboard))
                 await query.answer()
         
         elif data.startswith("team_earned_"):
@@ -209,7 +209,7 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
                 name = member.get('name', member.get('initials', ''))
                 text = f"✅ **ОТМЕЧЕНО**\n\n@{username} ({name}) заработал!"
                 from menu import get_team_menu
-                await safe_edit_message(query, text, reply_markup)
+                await safe_edit_message(query, text, get_team_menu())
                 await query.answer("✅ Отмечено")
                 logger.info(f"Сотрудник @{username} отмечен как заработавший")
             else:
@@ -243,7 +243,7 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
                 "👥 **УПРАВЛЕНИЕ КОМАНДОЙ**\n\n"
                 "Выберите действие:"
             )
-            await safe_edit_message(query, text, reply_markup)
+            await safe_edit_message(query, text, get_team_menu())
         
         elif data == "menu_weekly_tasks":
             from menu import get_weekly_tasks_menu
@@ -255,12 +255,12 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
                 "• Редактирование задач\n"
                 "• Удаление задач"
             )
-            await safe_edit_message(query, text, reply_markup)
+            await safe_edit_message(query, text, get_weekly_tasks_menu())
         
         elif data == "weekly_view":
             from menu import get_weekly_day_menu
             text = "📋 **ПРОСМОТР ЗАДАЧ**\n\nВыберите день недели:"
-            await safe_edit_message(query, text, reply_markup)
+            await safe_edit_message(query, text, get_weekly_day_menu())
         
         elif data.startswith("weekly_day_"):
             day = int(data.split("_")[-1])
@@ -275,16 +275,31 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
                 text = f"📋 **{day_name.upper()}**\n\n" + "\n".join(lines)
             
             from menu import get_weekly_day_menu
-            await safe_edit_message(query, text, reply_markup)
+            await safe_edit_message(query, text, get_weekly_day_menu())
         
         elif data == "weekly_add":
             # ConversationHandler обработает это
             return
         
         elif data == "weekly_edit":
-            from menu import get_weekly_day_menu
+            keyboard = [
+                [
+                    InlineKeyboardButton("Понедельник", callback_data="weekly_edit_day_0"),
+                    InlineKeyboardButton("Вторник", callback_data="weekly_edit_day_1")
+                ],
+                [
+                    InlineKeyboardButton("Среда", callback_data="weekly_edit_day_2"),
+                    InlineKeyboardButton("Четверг", callback_data="weekly_edit_day_3")
+                ],
+                [
+                    InlineKeyboardButton("Пятница", callback_data="weekly_edit_day_4")
+                ],
+                [
+                    InlineKeyboardButton("🔙 Назад", callback_data="menu_weekly_tasks")
+                ]
+            ]
             text = "✏️ **РЕДАКТИРОВАНИЕ ЗАДАЧ**\n\nВыберите день недели:"
-            await safe_edit_message(query, text, reply_markup)
+            await safe_edit_message(query, text, InlineKeyboardMarkup(keyboard))
         
         elif data == "weekly_delete":
             # Создаем специальное меню для выбора дня при удалении
@@ -305,7 +320,7 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
                 ]
             ]
             text = "🗑️ **УДАЛЕНИЕ ЗАДАЧИ**\n\nВыберите день недели:"
-            await safe_edit_message(query, text, reply_markup)
+            await safe_edit_message(query, text, InlineKeyboardMarkup(keyboard))
         
         elif data.startswith("weekly_edit_day_"):
             day = int(data.split("_")[-1])
@@ -316,11 +331,11 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
             if not tasks:
                 text = f"✏️ **РЕДАКТИРОВАНИЕ: {day_name.upper()}**\n\nЗадач пока нет."
                 from menu import get_weekly_day_menu
-                await safe_edit_message(query, text, reply_markup)
+                await safe_edit_message(query, text, get_weekly_day_menu())
             else:
                 from menu import get_weekly_tasks_list_menu
                 text = f"✏️ **РЕДАКТИРОВАНИЕ: {day_name.upper()}**\n\nВыберите задачу для редактирования:"
-                await safe_edit_message(query, text, reply_markup)
+                await safe_edit_message(query, text, get_weekly_tasks_list_menu(tasks, day, "weekly_edit_task"))
         
         elif data.startswith("weekly_edit_task_"):
             task_id = int(data.split("_")[-1])
@@ -336,7 +351,7 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
                 keyboard = InlineKeyboardMarkup([[
                     InlineKeyboardButton("❌ Отмена", callback_data="weekly_edit_cancel")
                 ]])
-                await safe_edit_message(query, )
+                await safe_edit_message(query, text, keyboard)
                 # Сохраняем состояние для обработки текста
                 context.user_data['weekly_edit_state'] = True
             else:
@@ -351,23 +366,23 @@ async def handle_menu_callback(query, data: str, context: ContextTypes.DEFAULT_T
             if not tasks:
                 text = f"🗑️ **УДАЛЕНИЕ: {day_name.upper()}**\n\nЗадач пока нет."
                 from menu import get_weekly_day_menu
-                await safe_edit_message(query, text, reply_markup)
+                await safe_edit_message(query, text, get_weekly_day_menu())
             else:
                 from menu import get_weekly_tasks_list_menu
                 text = f"🗑️ **УДАЛЕНИЕ: {day_name.upper()}**\n\nВыберите задачу для удаления:"
-                await safe_edit_message(query, text, reply_markup)
+                await safe_edit_message(query, text, get_weekly_tasks_list_menu(tasks, day, "weekly_delete_task"))
         
         elif data.startswith("weekly_delete_task_"):
             task_id = int(data.split("_")[-1])
-            task = db.get_weekly_tasks()
-            task_info = next((t for t in task if t['id'] == task_id), None)
+            all_tasks = db.get_weekly_tasks()
+            task_info = next((t for t in all_tasks if t['id'] == task_id), None)
             if task_info:
                 db.delete_weekly_task(task_id)
                 await query.answer("✅ Задача удалена", show_alert=True)
                 # Возвращаемся к меню
                 from menu import get_weekly_tasks_menu
                 text = "📅 **ЕЖЕНЕДЕЛЬНЫЕ ЗАДАЧИ**\n\nЗадача успешно удалена."
-                await safe_edit_message(query, text, reply_markup)
+                await safe_edit_message(query, text, get_weekly_tasks_menu())
             else:
                 await query.answer("❌ Задача не найдена", show_alert=True)
         
@@ -516,7 +531,7 @@ async def handle_presence_callback(query, data: str, context: ContextTypes.DEFAU
             # Опаздываю - показываем меню выбора времени
             from menu import get_delay_time_menu
             text = "⏰ **ОПОЗДАНИЕ**\n\nВыберите количество часов опоздания:"
-            await safe_edit_message(query, text, reply_markup)
+            await safe_edit_message(query, text, get_delay_time_menu())
             await query.answer()
         
         elif data == "presence_cancel":
@@ -555,8 +570,9 @@ async def handle_delay_callback(query, data: str, context: ContextTypes.DEFAULT_
                 await query.answer("❌ Ошибка формата времени", show_alert=True)
                 return
             context.user_data['delay_hour'] = hour
+            from menu import get_delay_minutes_menu
             text = f"⏰ **ОПОЗДАНИЕ**\n\nВыбрано: {hour}ч\n\nВыберите минуты:"
-            await safe_edit_message(query, text, reply_markup)
+            await safe_edit_message(query, text, get_delay_minutes_menu(hour))
             await query.answer()
         
         elif parts[1] == "minute":
@@ -657,7 +673,8 @@ async def handle_new_task_callback(query, data: str, context: ContextTypes.DEFAU
                 f"📊 Статус: {task['status']}\n"
                 f"👨‍💼 Создатель: {task['creator']}"
             )
-            await safe_edit_message(query, text, reply_markup)
+            from menu import get_task_actions_menu
+            await safe_edit_message(query, text, get_task_actions_menu(task_id))
         
         elif action == "edit":
             text = "✏️ Редактирование задачи будет доступно в следующей версии"
@@ -668,7 +685,8 @@ async def handle_new_task_callback(query, data: str, context: ContextTypes.DEFAU
         
         elif action == "delete":
             text = f"🗑️ **УДАЛЕНИЕ ЗАДАЧИ**\n\nВы уверены, что хотите удалить задачу:\n\n**{task['title']}**?"
-            await safe_edit_message(query, text, reply_markup)
+            from menu import get_confirm_menu
+            await safe_edit_message(query, text, get_confirm_menu("delete", task_id))
         
         elif action == "complete":
             text = f"✅ **ЗАВЕРШЕНИЕ ЗАДАЧИ**\n\nЗадача: **{task['title']}**\n\nВведите результат выполнения (или нажмите 'Быстро завершить'):"
@@ -892,7 +910,8 @@ async def handle_confirm_callback(query, data: str, context: ContextTypes.DEFAUL
                 task = db.get_custom_task(item_id)
                 if task:
                     text = f"📋 **ЗАДАЧА #{item_id}**\n\nУдаление отменено."
-                    await safe_edit_message(query, text, reply_markup)
+                    from menu import get_task_actions_menu
+                    await safe_edit_message(query, text, get_task_actions_menu(item_id))
             return
         
         if action_type == "confirm":
